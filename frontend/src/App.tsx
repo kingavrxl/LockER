@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   ShieldAlert,
   ShieldCheck, 
@@ -83,6 +83,27 @@ export function App() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [loadingActionId, setLoadingActionId] = useState<number | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+
+  // Synchronisation automatique en temps réel avec l'API Backend
+  const fetchDrivers = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/drivers');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setDrivers(data);
+        }
+      }
+    } catch {
+      // Conserve l'état local si l'API est indisponible
+    }
+  };
+
+  useEffect(() => {
+    fetchDrivers();
+    const interval = setInterval(fetchDrivers, 2500);
+    return () => clearInterval(interval);
+  }, []);
 
   const showNotification = (msg: string) => {
     setNotification(msg);
