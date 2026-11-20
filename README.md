@@ -12,7 +12,7 @@ Plateforme de gestion de flotte et de verrouillage à distance (Device Owner / M
   - L'écran passe en mode Kiosk permanent non-quittable (`LockTaskMode`).
   - Aucun appel entrant n'est autorisé.
   - Seuls sont autorisés :
-    1. **Le bouton d'appel direct vers le support de flotte** (+229...).
+    1. **Le bouton d'appel direct vers le support de flotte** (+229 01 91 52 15 18).
     2. **Le bouton d'appel d'urgence 112** (Obligation légale au Bénin et internationale).
   - Déverrouillage automatique et instantané dès confirmation du paiement (Webhook).
 - **Sécurité hors-ligne (Anti-Contournement)** :

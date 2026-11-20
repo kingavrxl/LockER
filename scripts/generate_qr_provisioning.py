@@ -14,7 +14,7 @@ def generate_provisioning_payload(
     apk_download_url: str,
     apk_sha256_checksum: str,
     server_api_url: str = "https://api.votre-domaine.bj/api/v1",
-    support_phone: str = "+22997000000"
+    support_phone: str = "+2290191521518"
 ) -> str:
     payload = {
         "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME": "com.locker.agent/.receiver.LockerDeviceAdminReceiver",

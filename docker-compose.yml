@@ -24,7 +24,7 @@ services:
       - db
     environment:
       - DATABASE_URL=postgresql+asyncpg://locker_user:locker_pass@db:5432/locker_db
-      - SUPPORT_PHONE_NUMBER=+22997000000
+      - SUPPORT_PHONE_NUMBER=+2290191521518
     ports:
       - "8000:8000"
     volumes:

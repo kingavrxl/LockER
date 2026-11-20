@@ -34,7 +34,7 @@ class LockerFirebaseMessagingService : FirebaseMessagingService() {
         when (action) {
             "LOCK" -> {
                 val reason = data["reason"] ?: "Paiement en retard de plus de 3 jours"
-                val supportPhone = data["support_phone"] ?: "+22900000000"
+                val supportPhone = data["support_phone"] ?: "+2290191521518"
                 policyManager.lockDevice(reason, supportPhone)
             }
             "UNLOCK" -> {

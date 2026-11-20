@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: Optional[str] = "firebase-service-account.json"
     
     # Sécurité & Support
-    SUPPORT_PHONE_NUMBER: str = "+22901000000"  # Format Bénin (+229)
+    SUPPORT_PHONE_NUMBER: str = "+2290191521518"  # Support Flotte Bénin (+229 01 91 52 15 18)
     ADMIN_SECRET_KEY: str = "locker_super_secret_key_change_in_production"
     
     # Passerelles de paiement

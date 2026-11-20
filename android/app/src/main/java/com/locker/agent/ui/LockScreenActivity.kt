@@ -23,7 +23,7 @@ class LockScreenActivity : Activity() {
     private lateinit var btnRefreshStatus: Button
     private lateinit var btnEmergencyCall: Button
 
-    private var supportPhoneNumber: String = "+22900000000"
+    private var supportPhoneNumber: String = "+2290191521518"
 
     // Récepteur pour fermer l'activité dès la réception de l'ordre UNLOCK
     private val unlockReceiver = object : BroadcastReceiver() {
@@ -58,7 +58,7 @@ class LockScreenActivity : Activity() {
         btnEmergencyCall = findViewById(R.id.btnEmergencyCall)
 
         val reason = intent.getStringExtra("EXTRA_REASON") ?: "Paiement en retard de plus de 3 jours"
-        supportPhoneNumber = intent.getStringExtra("EXTRA_SUPPORT_PHONE") ?: "+22900000000"
+        supportPhoneNumber = intent.getStringExtra("EXTRA_SUPPORT_PHONE") ?: "+2290191521518"
         tvReason.text = "Motif : $reason"
 
         setupActions()
