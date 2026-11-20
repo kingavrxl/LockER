@@ -1,6 +1,6 @@
 import json
 import logging
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Request, HTTPException, Depends, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
@@ -63,12 +63,25 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/fedapay")
-async def fedapay_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+async def fedapay_webhook(
+    payload: dict = Body(..., example={
+        "name": "transaction.approved",
+        "entity": {
+            "id": 789123,
+            "amount": 5000,
+            "reference": "MTN_MOMO_BENIN_OK_0191521518",
+            "status": "approved",
+            "custom_metadata": {
+                "driver_id": 3
+            }
+        }
+    }),
+    db: AsyncSession = Depends(get_db)
+):
     """
     Webhook FedaPay / Mobile Money Bénin (MTN MoMo, Moov Money).
     Très répandu au Bénin pour les paiements conducteurs en Francs CFA (XOF).
     """
-    payload = await request.json()
     event_name = payload.get("name")
     logger.info(f"Webhook FedaPay reçu : {event_name}")
 
