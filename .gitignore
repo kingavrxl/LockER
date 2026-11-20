@@ -1,0 +1,47 @@
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+backend/.env
+firebase-service-account*.json
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# Android / Gradle
+.gradle/
+build/
+android/build/
+android/app/build/
+*.apk
+*.aab
+local.properties
+.idea/
+*.iml
+*.keystore
+*.jks
+android/.gradle/
+android/app/.cxx/
+
+# OS / Editors
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
+*.bak

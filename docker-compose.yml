@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: locker_db
+    restart: always
+    environment:
+      POSTGRES_USER: locker_user
+      POSTGRES_PASSWORD: locker_pass
+      POSTGRES_DB: locker_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: locker_backend
+    restart: always
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://locker_user:locker_pass@db:5432/locker_db
+      - SUPPORT_PHONE_NUMBER=+22997000000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+
+volumes:
+  postgres_data:
