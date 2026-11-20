@@ -50,7 +50,7 @@ class LockerPolicyManager(private val context: Context) {
 
             Log.i(TAG, "Politiques Device Owner configurées avec succès.")
         } catch (e: Exception) {
-            Log.error(TAG, "Erreur lors de la configuration des politiques Device Owner: ${e.message}")
+            Log.e(TAG, "Erreur lors de la configuration des politiques Device Owner: ${e.message}", e)
         }
     }
 

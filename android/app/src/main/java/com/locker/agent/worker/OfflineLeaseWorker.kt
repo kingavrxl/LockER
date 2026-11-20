@@ -41,7 +41,7 @@ class OfflineLeaseWorker(
                     )
                 }
             } catch (e: Exception) {
-                Log.error(TAG, "Erreur lors de la vérification du bail : ${e.message}")
+                Log.e(TAG, "Erreur lors de la vérification du bail : ${e.message}", e)
             }
         }
 
