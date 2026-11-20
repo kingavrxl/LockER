@@ -1,20 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
-  ShieldAlert, 
+  ShieldAlert,
   ShieldCheck, 
   Lock, 
   Unlock, 
   Smartphone, 
-  Car, 
   User, 
-  Clock, 
   Search, 
   RefreshCw, 
   PhoneCall, 
-  AlertTriangle,
-  TrendingUp
+  AlertTriangle
 } from 'lucide-react';
-import { Driver, DriverStatus } from './types';
+import { Driver } from './types';
 
 // Données initiales représentatives des 20 téléphones Samsung A34 5G au Bénin
 const INITIAL_DRIVERS: Driver[] = [
@@ -98,8 +95,15 @@ export function App() {
     const action = isCurrentlyLocked ? 'unblock' : 'block';
 
     try {
-      // Simulation d'appel API vers FastAPI Backend
-      // await fetch(`http://localhost:8000/api/v1/${action}/${driver.id}`, { method: 'POST' });
+      try {
+        await fetch(`http://localhost:8000/api/v1/${action}/${driver.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: isCurrentlyLocked ? 'Déblocage administratif' : 'Blocage pour impayé' })
+        });
+      } catch {
+        // En mode déconnecté, la mise à jour locale immédiate s'applique
+      }
       
       setDrivers(prev => prev.map(d => {
         if (d.id === driver.id) {

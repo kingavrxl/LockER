@@ -15,9 +15,12 @@ logger = logging.getLogger("LockER")
 async def lifespan(app: FastAPI):
     logger.info("Démarrage de LockER Backend API...")
     # Création des tables automatiques au lancement
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Tables de la base de données initialisées.")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Tables de la base de données initialisées avec succès.")
+    except Exception as e:
+        logger.warning(f"Impossible d'initialiser les tables de la base de données ({e}). Vérifiez la disponibilité du serveur PostgreSQL ou de la base locale.")
     yield
     logger.info("Arrêt de LockER Backend API.")
 

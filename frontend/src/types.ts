@@ -2,7 +2,7 @@ export type DriverStatus = 'UP_TO_DATE' | 'OVERDUE_1' | 'OVERDUE_2' | 'OVERDUE_3
 
 export interface Driver {
   id: number;
-  full_name: str;
+  full_name: string;
   phone_number: string;
   national_id?: string;
   vehicle_plate?: string;
