@@ -12,9 +12,9 @@ import sys
 import qrcode
 
 def generate_provisioning_payload(
-    apk_download_url: str = "http://192.168.100.30:8000/download/app-release.apk",
+    apk_download_url: str = "https://locker-2nuk.onrender.com/download/app-release.apk",
     apk_sha256_checksum: str = "J4LMCIeac8vKo3aGsa_S-VH5FBYGxyRvm9yaPU4_jVQ",
-    server_api_url: str = "http://192.168.100.30:8000/api/v1",
+    server_api_url: str = "https://locker-2nuk.onrender.com/api/v1",
     support_phone: str = "+2290191521518"
 ) -> str:
     payload = {

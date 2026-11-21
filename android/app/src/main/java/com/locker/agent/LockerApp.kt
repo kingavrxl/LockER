@@ -68,7 +68,7 @@ class LockerApp : Application() {
     private fun syncWithBackend(imei: String, token: String) {
         Thread {
             val endpoints = listOf(
-                "https://locker-backend-api.onrender.com/api/v1/devices/register",
+                "https://locker-2nuk.onrender.com/api/v1/devices/register",
                 "http://192.168.100.30:8000/api/v1/devices/register",
                 "http://10.0.2.2:8000/api/v1/devices/register"
             )

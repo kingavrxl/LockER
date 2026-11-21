@@ -35,7 +35,7 @@ export function App() {
   // Dynamic API URL (LocalStorage / Render Cloud / Local)
   const defaultApi = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
     ? 'http://localhost:8000'
-    : 'https://locker-backend-api.onrender.com';
+    : 'https://locker-2nuk.onrender.com';
   const [apiUrl, setApiUrl] = useState(() => localStorage.getItem('locker_api_url') || defaultApi);
   const [showApiModal, setShowApiModal] = useState(false);
   const [tempApiUrl, setTempApiUrl] = useState(apiUrl);
@@ -816,7 +816,7 @@ export function App() {
                   type="url" 
                   value={tempApiUrl} 
                   onChange={(e) => setTempApiUrl(e.target.value)}
-                  placeholder="https://locker-backend-api.onrender.com"
+                  placeholder="https://locker-2nuk.onrender.com"
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500"
                 />
               </div>
@@ -824,7 +824,7 @@ export function App() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setTempApiUrl('https://locker-backend-api.onrender.com')}
+                  onClick={() => setTempApiUrl('https://locker-2nuk.onrender.com')}
                   className="px-2.5 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded-lg border border-slate-700"
                 >
                   Défaut Render
