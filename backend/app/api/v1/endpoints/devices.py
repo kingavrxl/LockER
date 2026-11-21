@@ -99,6 +99,7 @@ async def device_heartbeat(payload: DeviceHeartbeatRequest, db: AsyncSession = D
     return {
         "status": "ok",
         "is_locked": device.is_locked,
+        "lock_reason": device.lock_reason,
         "lease_expires_at": device.lease_expires_at.isoformat() if device.lease_expires_at else None
     }
 

@@ -31,17 +31,35 @@ class LockScreenActivity : Activity() {
     private lateinit var btnEmergencyCall: Button
 
     private var supportPhoneNumber: String = "+2290191521518"
+    private var isUnlockedExplicitly = false
 
     // Récepteur pour fermer l'activité dès la réception de l'ordre UNLOCK
     private val unlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            try {
-                stopLockTask()
-            } catch (e: Exception) {
-                Log.w("LockScreen", "stopLockTask: ${e.message}")
-            }
-            finish()
+            Log.i("LockScreen", "Broadcast ACTION_UNLOCK reçu !")
+            performUnlock()
         }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent?.getBooleanExtra("EXTRA_UNLOCK", false) == true) {
+            Log.i("LockScreen", "onNewIntent avec EXTRA_UNLOCK=true !")
+            performUnlock()
+        }
+    }
+
+    private fun performUnlock() {
+        isUnlockedExplicitly = true
+        val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("is_locked", false).apply()
+        try {
+            stopLockTask()
+        } catch (e: Exception) {
+            Log.w("LockScreen", "stopLockTask: ${e.message}")
+        }
+        finish()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -143,18 +161,19 @@ class LockScreenActivity : Activity() {
             startActivity(emergencyIntent)
         }
 
-        // 4. Actualiser l'état (Ping le serveur pour vérifier si le paiement est confirmé)
+        // 4. Actualiser l'état (Ping le serveur pour vérifier si le déverrouillage est ordonné)
         btnRefreshStatus.setOnClickListener {
             Toast.makeText(this, "Vérification auprès du serveur central...", Toast.LENGTH_SHORT).show()
             Thread {
                 try {
+                    val androidId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "352965710157155"
                     val client = OkHttpClient()
                     val json = JSONObject().apply {
-                        put("imei", "352965710157155")
+                        put("imei", androidId)
                     }
                     val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
                     val request = Request.Builder()
-                        .url("http://192.168.100.30:8000/api/v1/devices/heartbeat")
+                        .url("https://locker-2nuk.onrender.com/api/v1/devices/heartbeat")
                         .post(body)
                         .build()
                     val response = client.newCall(request).execute()
@@ -164,11 +183,10 @@ class LockScreenActivity : Activity() {
                         val isLocked = respJson.optBoolean("is_locked", true)
                         runOnUiThread {
                             if (!isLocked) {
-                                Toast.makeText(this@LockScreenActivity, "Paiement validé ! Déverrouillage...", Toast.LENGTH_LONG).show()
-                                try { stopLockTask() } catch (_: Exception) {}
-                                finish()
+                                Toast.makeText(this@LockScreenActivity, "Déverrouillage validé par le serveur !", Toast.LENGTH_LONG).show()
+                                performUnlock()
                             } else {
-                                Toast.makeText(this@LockScreenActivity, "Paiement non encore détecté. Veuillez patienter après versement.", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this@LockScreenActivity, "Ce terminal est toujours marqué comme bloqué sur le serveur.", Toast.LENGTH_LONG).show()
                             }
                         }
                     }
@@ -189,8 +207,9 @@ class LockScreenActivity : Activity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
+        if (isFinishing || isDestroyed || isUnlockedExplicitly) return
         val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
-        if (prefs.getBoolean("is_locked", true)) {
+        if (prefs.getBoolean("is_locked", false)) {
             val intent = Intent(this, LockScreenActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             }
@@ -200,8 +219,9 @@ class LockScreenActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        if (isFinishing || isDestroyed || isUnlockedExplicitly) return
         val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
-        if (prefs.getBoolean("is_locked", true)) {
+        if (prefs.getBoolean("is_locked", false)) {
             val intent = Intent(this, LockScreenActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             }
@@ -212,8 +232,9 @@ class LockScreenActivity : Activity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (!hasFocus) {
+            if (isFinishing || isDestroyed || isUnlockedExplicitly) return
             val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
-            if (prefs.getBoolean("is_locked", true)) {
+            if (prefs.getBoolean("is_locked", false)) {
                 val intent = Intent(this, LockScreenActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 }

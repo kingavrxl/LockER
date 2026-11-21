@@ -164,13 +164,27 @@ class LockerPolicyManager(private val context: Context) {
         val prefs = context.getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("is_locked", false).apply()
 
-        // Supprimer la notification permanente de blocage
+        // 1. Supprimer la notification permanente de blocage
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(LOCK_NOTIF_ID)
 
-        // Notifier l'activité de s'arrêter
-        val intent = Intent("com.locker.agent.ACTION_UNLOCK")
+        // 2. Notifier l'activité de s'arrêter via broadcast explicite
+        val intent = Intent("com.locker.agent.ACTION_UNLOCK").apply {
+            setPackage(context.packageName)
+        }
         context.sendBroadcast(intent)
-        Log.i(TAG, "Déverrouillage de l'appareil ordonné.")
+
+        // 3. Envoyer également une intention directe avec EXTRA_UNLOCK pour garantir la fermeture
+        try {
+            val unlockIntent = Intent(context, LockScreenActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra("EXTRA_UNLOCK", true)
+            }
+            context.startActivity(unlockIntent)
+        } catch (e: Exception) {
+            Log.w(TAG, "startActivity EXTRA_UNLOCK: ${e.message}")
+        }
+
+        Log.i(TAG, "Déverrouillage de l'appareil ordonné avec succès.")
     }
 }
