@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0F172A"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center_horizontal">
+
+        <!-- Header MDM -->
+        <ImageView
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:src="@android:drawable/ic_lock_lock"
+            android:tint="#06B6D4"
+            android:layout_marginTop="20dp"
+            android:contentDescription="LockER Icon" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="LockER Agent MDM"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:layout_marginTop="12dp" />
+
+        <TextView
+            android:id="@+id/tvCloudStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="● En cours de connexion au Cloud..."
+            android:textColor="#F59E0B"
+            android:textSize="13sp"
+            android:layout_marginTop="6dp" />
+
+        <!-- Card Infos Matériel -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E293B"
+            android:padding="18dp"
+            android:layout_marginTop="24dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="IDENTIFIANTS MATÉRIELS DÉTECTÉS"
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.05" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginVertical="10dp" />
+
+            <TextView
+                android:id="@+id/tvModel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Modèle : Samsung Galaxy A34 5G"
+                android:textColor="#F8FAFC"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvImei"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="IMEI : Détection en cours..."
+                android:textColor="#38BDF8"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginTop="8dp" />
+
+            <TextView
+                android:id="@+id/tvSerial"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Série : -"
+                android:textColor="#CBD5E1"
+                android:textSize="13sp"
+                android:layout_marginTop="6dp" />
+
+            <TextView
+                android:id="@+id/tvFcmToken"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Jeton FCM Google : Récupération..."
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:layout_marginTop="8dp" />
+
+            <TextView
+                android:id="@+id/tvAdminStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Droits MDM : Vérification..."
+                android:textColor="#10B981"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginTop="10dp" />
+
+        </LinearLayout>
+
+        <!-- Actions -->
+        <Button
+            android:id="@+id/btnSyncNow"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="FORCER LA SYNCHRONISATION"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:backgroundTint="#0891B2"
+            android:layout_marginTop="24dp" />
+
+        <Button
+            android:id="@+id/btnRequestAdmin"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="ACTIVER LES DROITS ADMINISTRATEUR"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:backgroundTint="#4F46E5"
+            android:layout_marginTop="12dp"
+            android:visibility="gone" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Gestion sécurisée de flotte automobile Bénin.\nLe verrouillage et le déblocage sont pilotés par les airs depuis la plateforme web."
+            android:textColor="#64748B"
+            android:textSize="11sp"
+            android:gravity="center"
+            android:layout_marginTop="24dp" />
+
+    </LinearLayout>
+
+</ScrollView>
