@@ -5,6 +5,7 @@ from sqlalchemy import select
 from typing import List
 from app.core.database import get_db
 from app.models.device import Device
+from app.models.driver import Driver, PaymentStatusEnum
 from app.schemas.device import DeviceRegisterRequest, DeviceHeartbeatRequest, DeviceOut
 from app.core.config import settings
 
