@@ -20,16 +20,24 @@ class LockerApp : Application() {
         super.onCreate()
         Log.i("LockerApp", "Application LockER démarrée.")
 
+        // Lancer immédiatement le service d'arrière-plan permanent
+        try {
+            com.locker.agent.service.LockerPersistentService.start(this)
+        } catch (e: Exception) {
+            Log.w("LockerApp", "LockerPersistentService start: ${e.message}")
+        }
+
         // Récupérer le token FCM officiel Google
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            val imei = resolveDeviceImei()
             if (task.isSuccessful) {
                 val token = task.result
                 Log.i("LockerFCM", "REAL_FCM_TOKEN: $token")
-                val imei = resolveDeviceImei()
+                val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
+                prefs.edit().putString("fcm_token", token).apply()
                 syncWithBackend(imei, token)
             } else {
                 Log.w("LockerFCM", "Échec récupération FCM token: ${task.exception?.message}")
-                val imei = resolveDeviceImei()
                 syncWithBackend(imei, "")
             }
         }

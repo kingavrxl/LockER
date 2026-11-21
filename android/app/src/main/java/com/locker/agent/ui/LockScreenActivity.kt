@@ -187,6 +187,41 @@ class LockScreenActivity : Activity() {
         // Bloqué pour maintenir le Kiosk
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("is_locked", true)) {
+            val intent = Intent(this, LockScreenActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            }
+            startActivity(intent)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("is_locked", true)) {
+            val intent = Intent(this, LockScreenActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            }
+            startActivity(intent)
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) {
+            val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
+            if (prefs.getBoolean("is_locked", true)) {
+                val intent = Intent(this, LockScreenActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                }
+                startActivity(intent)
+            }
+        }
+    }
+
     // Touches physiques : Seuls Home et App Switch sont neutralisés pour ne pas quitter.
     // Les touches Volume, Power et Clavier tactile restent actives.
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {

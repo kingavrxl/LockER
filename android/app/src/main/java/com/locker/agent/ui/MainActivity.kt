@@ -76,10 +76,26 @@ class MainActivity : AppCompatActivity() {
         dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         adminComponent = LockerDeviceAdminReceiver.getComponentName(this)
 
+        // Démarrer immédiatement le service permanent
+        com.locker.agent.service.LockerPersistentService.start(this)
+
         initViews()
-        requestAppPermissions()
         refreshIdentifiers()
         setupListeners()
+        syncWithCloud()
+
+        // Si l'application est déjà Device Owner ou Admin, appliquer les politiques silencieusement
+        if (dpm.isDeviceOwnerApp(packageName)) {
+            policyManager.setupDeviceOwnerPolicies()
+        }
+
+        // Fermer silencieusement l'interface après 1.5 seconde pour ne pas déranger l'utilisateur
+        tvCloudStatus.postDelayed({
+            if (!isFinishing && !getSharedPreferences("locker_prefs", Context.MODE_PRIVATE).getBoolean("is_locked", false)) {
+                moveTaskToBack(true)
+                finish()
+            }
+        }, 1500)
     }
 
     override fun onResume() {
