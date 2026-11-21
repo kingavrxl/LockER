@@ -36,7 +36,18 @@ export function App() {
   const defaultApi = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
     ? 'http://localhost:8000'
     : 'https://locker-2nuk.onrender.com';
-  const [apiUrl, setApiUrl] = useState(() => localStorage.getItem('locker_api_url') || defaultApi);
+
+  const getInitialApi = () => {
+    if (typeof window === 'undefined') return defaultApi;
+    const stored = localStorage.getItem('locker_api_url');
+    if (!stored || stored.includes('locker-backend-api') || (stored.includes('localhost') && window.location.hostname !== 'localhost') || (stored.startsWith('http://') && window.location.protocol === 'https:')) {
+      localStorage.setItem('locker_api_url', defaultApi);
+      return defaultApi;
+    }
+    return stored;
+  };
+
+  const [apiUrl, setApiUrl] = useState(getInitialApi);
   const [showApiModal, setShowApiModal] = useState(false);
   const [tempApiUrl, setTempApiUrl] = useState(apiUrl);
   const [isApiOnline, setIsApiOnline] = useState<boolean | null>(null);
@@ -757,7 +768,7 @@ export function App() {
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl animate-scale-up">
             <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white">QR Code Android Enterprise</h3>
+              <h3 className="text-base font-bold text-white">QR Code d'Installation Rapide</h3>
               <button onClick={() => setShowQrModal(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
@@ -765,21 +776,30 @@ export function App() {
 
             <div className="p-3 bg-white rounded-2xl inline-block shadow-inner">
               <img 
-                src="/enrollment_qr.png" 
-                alt="QR Code Enrôlement LockER" 
+                src={`/enrollment_qr.png?v=${Date.now()}`} 
+                alt="QR Code Téléchargement APK LockER" 
                 className="w-56 h-56 object-contain"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
               />
             </div>
 
-            <p className="text-xs text-slate-400 text-left leading-relaxed">
-              <strong>Instructions Samsung A34 :</strong><br/>
-              1. Allumer le téléphone neuf (écran <em>"Bienvenue"</em>).<br/>
-              2. Tapoter 6 fois sur l'écran pour ouvrir la caméra.<br/>
-              3. Scanner ce QR Code pour installer automatiquement l'application.
-            </p>
+            <div className="text-xs text-slate-300 text-left bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
+              <p className="font-semibold text-cyan-400">📱 Installation sans câble :</p>
+              <p className="text-slate-400">
+                1. Scannez ce QR Code avec l'appareil photo du téléphone.<br/>
+                2. Cliquez sur le lien pour lancer le téléchargement de l'APK.<br/>
+                3. Ouvrez le fichier téléchargé et installez l'application.
+              </p>
+              <div className="pt-1">
+                <a 
+                  href="https://locker-2nuk.onrender.com/download/app-release.apk" 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="text-[11px] text-cyan-400 underline hover:text-cyan-300 break-all"
+                >
+                  Lien direct : locker-2nuk.onrender.com/download/app-release.apk
+                </a>
+              </div>
+            </div>
 
             <button 
               onClick={() => setShowQrModal(false)}
