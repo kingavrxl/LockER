@@ -52,6 +52,18 @@ app.include_router(lock.router, prefix=settings.API_V1_STR)
 app.include_router(webhooks.router, prefix=settings.API_V1_STR)
 
 
+@app.get("/", tags=["Root"])
+async def root():
+    return {
+        "status": "online",
+        "service": "LockER MDM Backend API (Samsung Galaxy A34 5G - Bénin)",
+        "version": "1.0.0",
+        "docs_url": "/docs",
+        "health_check": "/health",
+        "apk_download_url": "/download/app-release.apk"
+    }
+
+
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {
