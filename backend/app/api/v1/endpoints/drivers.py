@@ -4,6 +4,7 @@ from sqlalchemy import select
 from typing import List
 from app.core.database import get_db
 from app.models.driver import Driver
+from app.models.device import Device
 from app.schemas.driver import DriverCreate, DriverOut, DriverUpdate
 
 router = APIRouter(prefix="/drivers", tags=["Drivers"])
@@ -56,3 +57,20 @@ async def update_driver(driver_id: int, update_in: DriverUpdate, db: AsyncSessio
     await db.commit()
     await db.refresh(driver)
     return driver
+
+
+@router.delete("/{driver_id}")
+async def delete_driver(driver_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Driver).where(Driver.id == driver_id))
+    driver = result.scalars().first()
+    if not driver:
+        raise HTTPException(status_code=404, detail="Conducteur non trouvé.")
+    
+    # Dissocier les appareils liés
+    dev_res = await db.execute(select(Device).where(Device.driver_id == driver_id))
+    for dev in dev_res.scalars().all():
+        dev.driver_id = None
+    
+    await db.delete(driver)
+    await db.commit()
+    return {"status": "success", "message": f"Conducteur {driver_id} supprimé."}

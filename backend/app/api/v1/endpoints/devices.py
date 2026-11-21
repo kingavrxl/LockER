@@ -30,8 +30,39 @@ async def register_device(payload: DeviceRegisterRequest, db: AsyncSession = Dep
         device.last_heartbeat = now
         if not device.lease_expires_at:
             device.lease_expires_at = default_lease
+
+        # S'il n'a pas encore de conducteur lié, création automatique
+        if not device.driver_id:
+            driver_count_res = await db.execute(select(Driver))
+            num = len(driver_count_res.scalars().all()) + 1
+            new_driver = Driver(
+                full_name=f"Conducteur {num} ({payload.model or 'Samsung'})",
+                phone_number=f"+229 01 {payload.imei[-8:-4]} {payload.imei[-4:]}",
+                vehicle_plate=f"RB-{payload.imei[-4:]}-Benin",
+                daily_rate_xof=settings.DAILY_PAYMENT_AMOUNT_XOF,
+                current_status=PaymentStatusEnum.UP_TO_DATE,
+                consecutive_overdue_days=0
+            )
+            db.add(new_driver)
+            await db.flush()
+            device.driver_id = new_driver.id
     else:
+        # Nouveau terminal enrôlé : création automatique instantanée de la ligne conducteur
+        driver_count_res = await db.execute(select(Driver))
+        num = len(driver_count_res.scalars().all()) + 1
+        new_driver = Driver(
+            full_name=f"Conducteur {num} ({payload.model or 'Samsung'})",
+            phone_number=f"+229 01 {payload.imei[-8:-4]} {payload.imei[-4:]}",
+            vehicle_plate=f"RB-{payload.imei[-4:]}-Benin",
+            daily_rate_xof=settings.DAILY_PAYMENT_AMOUNT_XOF,
+            current_status=PaymentStatusEnum.UP_TO_DATE,
+            consecutive_overdue_days=0
+        )
+        db.add(new_driver)
+        await db.flush()
+
         device = Device(
+            driver_id=new_driver.id,
             imei=payload.imei,
             serial_number=payload.serial_number,
             model=payload.model,

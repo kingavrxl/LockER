@@ -18,9 +18,18 @@ if (-not $devices) {
 Write-Host "[OK] Appareil Samsung détecté." -ForegroundColor Green
 
 # 1. Installation de l'APK Agent
-$apkPath = "..\android\app\build\outputs\apk\release\app-release.apk"
-if (-not (Test-Path $apkPath)) {
-    $apkPath = "app-release.apk"
+$possiblePaths = @(
+    "..\android\app\build\outputs\apk\release\app-release.apk",
+    "..\android\app\build\outputs\apk\debug\app-debug.apk",
+    "app-release.apk",
+    "app-debug.apk"
+)
+$apkPath = $null
+foreach ($path in $possiblePaths) {
+    if (Test-Path $path) {
+        $apkPath = $path
+        break
+    }
 }
 
 if (Test-Path $apkPath) {

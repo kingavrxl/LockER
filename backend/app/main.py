@@ -1,7 +1,9 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+import os
 
 from app.core.config import settings
 from app.core.database import engine, Base
@@ -20,31 +22,7 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Tables de la base de données initialisées avec succès.")
 
-        # Peuplement initial si la base est vide
-        from app.core.database import AsyncSessionLocal
-        from app.models.driver import Driver, PaymentStatusEnum
-        from app.models.device import Device
-        from sqlalchemy import select
-
-        async with AsyncSessionLocal() as session:
-            res = await session.execute(select(Driver))
-            if not res.scalars().first():
-                logger.info("Initialisation des 5 conducteurs de flotte au Bénin...")
-                demo_drivers = [
-                    Driver(id=1, full_name="Koffi Mensah", phone_number="+229 97 12 34 56", vehicle_plate="RB-4512-Cotonou", daily_rate_xof=5000, current_status=PaymentStatusEnum.UP_TO_DATE, consecutive_overdue_days=0),
-                    Driver(id=2, full_name="Bio Gado", phone_number="+229 96 44 21 00", vehicle_plate="RB-8891-Parakou", daily_rate_xof=5000, current_status=PaymentStatusEnum.OVERDUE_1, consecutive_overdue_days=1),
-                    Driver(id=3, full_name="Sébastien Dossou", phone_number="+229 61 78 90 12", vehicle_plate="RB-1209-Abomey", daily_rate_xof=5000, current_status=PaymentStatusEnum.LOCKED, consecutive_overdue_days=3),
-                    Driver(id=4, full_name="Awaou Chabi", phone_number="+229 95 33 22 11", vehicle_plate="RB-6677-PortoNovo", daily_rate_xof=5000, current_status=PaymentStatusEnum.UP_TO_DATE, consecutive_overdue_days=0),
-                    Driver(id=5, full_name="Aimé Houndegbe", phone_number="+229 90 11 88 44", vehicle_plate="RB-3321-Calavi", daily_rate_xof=5000, current_status=PaymentStatusEnum.OVERDUE_2, consecutive_overdue_days=2),
-                ]
-                session.add_all(demo_drivers)
-                await session.flush()
-
-                # Appareil Samsung Galaxy A34 5G associé à Sébastien Dossou (bloqué)
-                device_3 = Device(driver_id=3, imei="352889110022334", model="Samsung Galaxy A34 5G", is_locked=True, lock_reason="Paiement en retard de plus de 3 jours", fcm_token="token_samsung_a34_dossou")
-                session.add(device_3)
-                await session.commit()
-                logger.info("Conducteurs et terminaux Samsung A34 prêts.")
+        logger.info("Base de données prête en mode dynamique (zéro conducteur fictif).")
     except Exception as e:
         logger.warning(f"Impossible d'initialiser les tables de la base de données ({e}). Vérifiez la disponibilité du serveur PostgreSQL ou de la base locale.")
     yield
@@ -81,3 +59,17 @@ async def health_check():
         "service": settings.PROJECT_NAME,
         "region": "Bénin (XOF)"
     }
+
+
+@app.get("/download/app-release.apk", tags=["APK Download"])
+async def download_apk():
+    paths_to_check = [
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "app-release.apk")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "android", "app", "build", "outputs", "apk", "release", "app-release.apk")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "app-release.apk")),
+    ]
+    for p in paths_to_check:
+        if os.path.exists(p):
+            return FileResponse(p, media_type="application/vnd.android.package-archive", filename="app-release.apk")
+    raise HTTPException(status_code=404, detail="L'APK n'est pas encore compilé. Veuillez compiler le projet Android.")

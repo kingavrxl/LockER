@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 from typing import Dict, Any, Optional
 import firebase_admin
 from firebase_admin import credentials, messaging
@@ -15,13 +16,31 @@ def init_firebase():
     if _firebase_initialized:
         return
     
+    # 1. Vérification par variable d'environnement brute (très utile pour Render)
+    raw_json = os.environ.get("FIREBASE_CREDENTIALS_JSON")
+    if raw_json:
+        try:
+            cert_dict = json.loads(raw_json)
+            cred = credentials.Certificate(cert_dict)
+            firebase_admin.initialize_app(cred)
+            _firebase_initialized = True
+            logger.info("Firebase Admin SDK initialisé avec succès depuis FIREBASE_CREDENTIALS_JSON.")
+            return
+        except Exception as e:
+            logger.error(f"Erreur d'initialisation Firebase depuis FIREBASE_CREDENTIALS_JSON: {e}")
+
+    # 2. Vérification par fichier
     cred_path = settings.FIREBASE_CREDENTIALS_PATH
+    if cred_path and not os.path.isabs(cred_path):
+        if not os.path.exists(cred_path):
+            cred_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", cred_path))
+
     if cred_path and os.path.exists(cred_path):
         try:
             cred = credentials.Certificate(cred_path)
             firebase_admin.initialize_app(cred)
             _firebase_initialized = True
-            logger.info("Firebase Admin SDK initialisé avec succès.")
+            logger.info(f"Firebase Admin SDK initialisé avec succès ({cred_path}).")
         except Exception as e:
             logger.error(f"Erreur d'initialisation Firebase avec le fichier {cred_path}: {e}")
     else:

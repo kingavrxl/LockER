@@ -30,6 +30,7 @@ build/
 android/build/
 android/app/build/
 *.apk
+!backend/static/app-release.apk
 *.aab
 local.properties
 .idea/
@@ -45,3 +46,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.bak
+.firebase/
+inst_user_settings.tmp
+backend/locker.db

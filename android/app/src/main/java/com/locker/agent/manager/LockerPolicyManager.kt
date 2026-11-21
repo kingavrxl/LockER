@@ -33,8 +33,16 @@ class LockerPolicyManager(private val context: Context) {
         }
 
         try {
-            // 1. Autoriser notre propre package à entrer en LockTask Mode (Kiosk)
-            dpm.setLockTaskPackages(adminComponent, arrayOf(context.packageName))
+            // 1. Autoriser notre propre package et les services d'appel/urgence en Kiosk LockTask Mode
+            val allowedPackages = arrayOf(
+                context.packageName,
+                "com.samsung.android.dialer",
+                "com.samsung.android.incallui",
+                "com.google.android.dialer",
+                "com.android.phone",
+                "com.android.server.telecom"
+            )
+            dpm.setLockTaskPackages(adminComponent, allowedPackages)
 
             // 2. Empêcher la réinitialisation d'usine et le redémarrage en mode sans échec
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET)
@@ -42,11 +50,10 @@ class LockerPolicyManager(private val context: Context) {
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_UNINSTALL_APPS)
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_ADD_USER)
 
-            // 3. Activer la persistance de l'activité après redémarrage
-            dpm.setLockTaskFeatures(
-                adminComponent,
-                DevicePolicyManager.LOCK_TASK_FEATURE_NONE // Bloque barre d'état, boutons accueil et récents
-            )
+            // 3. Activer la persistance de l'activité tout en maintenant les touches physiques (Power/Volume) et l'accès d'urgence
+            val lockTaskFeatures = DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS or
+                    DevicePolicyManager.LOCK_TASK_FEATURE_KEYGUARD
+            dpm.setLockTaskFeatures(adminComponent, lockTaskFeatures)
 
             Log.i(TAG, "Politiques Device Owner configurées avec succès.")
         } catch (e: Exception) {

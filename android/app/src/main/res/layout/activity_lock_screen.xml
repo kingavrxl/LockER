@@ -70,34 +70,46 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
+    <!-- Bouton Payer Immédiatement (Mobile Money Bénin) -->
+    <Button
+        android:id="@+id/btnPayNow"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:backgroundTint="#059669"
+        android:textColor="#FFFFFF"
+        android:text="💳 PAYER MON FORFAIT (5 000 FCFA)"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
     <!-- Bouton Appeler le Support de Flotte -->
     <Button
         android:id="@+id/btnCallSupport"
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="52dp"
+        android:layout_marginTop="10dp"
         android:backgroundTint="#2563EB"
         android:textColor="#FFFFFF"
-        android:text="APPELER LE SUPPORT FLOTTE"
-        android:textSize="15sp"
+        android:text="📞 APPELER LE SUPPORT FLOTTE"
+        android:textSize="14sp"
         android:textStyle="bold" />
 
     <!-- Bouton Actualiser l'état (après paiement) -->
     <Button
         android:id="@+id/btnRefreshStatus"
         android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:layout_marginTop="12dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="10dp"
         android:backgroundTint="#334155"
         android:textColor="#FFFFFF"
-        android:text="J'AI EFFECTUÉ LE PAIEMENT (ACTUALISER)"
-        android:textSize="14sp" />
+        android:text="🔄 J'AI PAYÉ (ACTUALISER LE STATUT)"
+        android:textSize="13sp" />
 
     <!-- Bouton Urgences (Obligation Légale Bénin / Secours 112) -->
     <Button
         android:id="@+id/btnEmergencyCall"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="12dp"
+        android:layout_height="46dp"
+        android:layout_marginTop="10dp"
         android:backgroundTint="#DC2626"
         android:textColor="#FFFFFF"
         android:text="APPEL D'URGENCE (112)"
