@@ -9,7 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api.v1.endpoints import drivers, devices, lock, webhooks, lockybee
+from app.models.payment_schedule import PaymentScheduleRule
+from app.api.v1.endpoints import drivers, devices, lock, webhooks, lockybee, rules
 from app.services.cloud_push_hub import CloudPushHub
 
 logging.basicConfig(level=logging.INFO)
@@ -51,6 +52,7 @@ app.include_router(devices.router, prefix=settings.API_V1_STR)
 app.include_router(lock.router, prefix=settings.API_V1_STR)
 app.include_router(webhooks.router, prefix=settings.API_V1_STR)
 app.include_router(lockybee.router, prefix=settings.API_V1_STR)
+app.include_router(rules.router, prefix=settings.API_V1_STR)
 
 
 # =========================================================================

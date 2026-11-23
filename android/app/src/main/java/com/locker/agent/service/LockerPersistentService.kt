@@ -1,5 +1,6 @@
 package com.locker.agent.service
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,8 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.location.Location
+import android.location.LocationManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
@@ -128,6 +131,34 @@ class LockerPersistentService : Service() {
             .build()
     }
 
+    @SuppressLint("MissingPermission")
+    private fun fetchCurrentLocation(): Pair<Double, Double>? {
+        try {
+            val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
+            var bestLoc: Location? = null
+
+            // 1. Essayer GPS_PROVIDER
+            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                bestLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            }
+            // 2. Si non disponible, essayer NETWORK_PROVIDER (Antennes cellulaires MTN/Moov Bénin & WiFi)
+            if (bestLoc == null && lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                bestLoc = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            }
+            // 3. Essayer PASSIVE_PROVIDER
+            if (bestLoc == null && lm.isProviderEnabled(LocationManager.PASSIVE_PROVIDER)) {
+                bestLoc = lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+            }
+
+            if (bestLoc != null) {
+                return Pair(bestLoc.latitude, bestLoc.longitude)
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "fetchCurrentLocation: ${e.message}")
+        }
+        return null
+    }
+
     private fun startHeartbeatLoop() {
         serviceScope.launch {
             while (isActive) {
@@ -135,12 +166,19 @@ class LockerPersistentService : Service() {
                     val imei = resolveImei()
                     val fcmToken = getStoredFcmToken()
                     val batteryLevel = getBatteryLevel()
+                    val loc = fetchCurrentLocation()
+                    val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
 
                     val json = JSONObject().apply {
                         put("imei", imei)
+                        put("android_id", androidId)
                         put("fcm_token", fcmToken)
                         put("battery_level", batteryLevel)
                         put("is_network_connected", true)
+                        if (loc != null) {
+                            put("latitude", loc.first)
+                            put("longitude", loc.second)
+                        }
                     }
 
                     val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -155,15 +193,17 @@ class LockerPersistentService : Service() {
                         if (!responseBody.isNullOrBlank()) {
                             val respJson = JSONObject(responseBody)
                             val isLockedOnServer = respJson.optBoolean("is_locked", false)
+                            val lockReason = respJson.optString("lock_reason", "Échéance journalière dépassée (≥ 3 jours)")
+                            val supportPhone = respJson.optString("support_phone", "+2290191521518")
                             val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
                             val isCurrentlyLocked = prefs.getBoolean("is_locked", false)
 
-                            if (isLockedOnServer && !isCurrentlyLocked) {
-                                Log.w(TAG, "VERROUILLAGE DÉTECTÉ DEPUIS LE SERVEUR CLOUD !")
-                                policyManager.lockDevice(
-                                    reason = "Échéance journalière dépassée",
-                                    supportPhone = "+2290191521518"
-                                )
+                            if (isLockedOnServer) {
+                                if (!isCurrentlyLocked) {
+                                    Log.w(TAG, "VERROUILLAGE DÉTECTÉ DEPUIS LE SERVEUR CLOUD !")
+                                    policyManager.lockDevice(reason = lockReason, supportPhone = supportPhone)
+                                }
+                                ensureLockScreenVisible(lockReason)
                             } else if (!isLockedOnServer && isCurrentlyLocked) {
                                 Log.i(TAG, "DÉVERROUILLAGE DÉTECTÉ DEPUIS LE SERVEUR CLOUD !")
                                 policyManager.unlockDevice()
@@ -181,7 +221,7 @@ class LockerPersistentService : Service() {
                     ensureLockScreenVisible(prefs.getString("lock_reason", "Échéance dépassée") ?: "Échéance dépassée")
                 }
 
-                delay(4000) // Interrogation régulière toutes les 4 secondes
+                delay(3000) // Interrogation régulière toutes les 3 secondes
             }
         }
     }
@@ -200,6 +240,10 @@ class LockerPersistentService : Service() {
     }
 
     private fun resolveImei(): String {
+        val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
+        val savedImei = prefs.getString("assigned_imei", "")
+        if (!savedImei.isNullOrBlank()) return savedImei
+
         try {
             val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

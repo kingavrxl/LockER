@@ -77,3 +77,19 @@ export interface ChatMessage {
   timestamp: string;
   suggestions?: string[];
 }
+
+export interface PaymentScheduleRule {
+  id: number;
+  title: string;
+  due_date_str: string;
+  due_day?: number;
+  due_month?: number;
+  due_year?: number;
+  amount_xof: number;
+  payment_method: string;
+  payment_instructions?: string;
+  grace_period_days: number;
+  driver_id?: number;
+  is_active: boolean;
+  created_at: string;
+}

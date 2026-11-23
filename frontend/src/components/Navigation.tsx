@@ -8,14 +8,15 @@ import {
   LayoutDashboard, 
   Smartphone, 
   CreditCard, 
+  Calendar,
   Eye
 } from 'lucide-react';
 
 interface NavigationProps {
   theme: 'dark' | 'light';
   toggleTheme: () => void;
-  activeSection: 'dashboard' | 'fleet' | 'map' | 'lockybee' | 'payments' | 'preview';
-  setActiveSection: (sec: 'dashboard' | 'fleet' | 'map' | 'lockybee' | 'payments' | 'preview') => void;
+  activeSection: 'dashboard' | 'fleet' | 'map' | 'lockybee' | 'payments' | 'rules' | 'preview';
+  setActiveSection: (sec: 'dashboard' | 'fleet' | 'map' | 'lockybee' | 'payments' | 'rules' | 'preview') => void;
   onOpenAddWizard: () => void;
   onOpenConfigApi: () => void;
   isApiOnline: boolean | null;
@@ -141,6 +142,18 @@ export const Navigation: React.FC<NavigationProps> = ({
           >
             <CreditCard className="w-3.5 h-3.5" />
             <span>Paiements</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSection('rules')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${
+              activeSection === 'rules'
+                ? isDark ? 'bg-emerald-600 text-white shadow' : 'bg-emerald-600 text-white shadow'
+                : isDark ? 'text-slate-300 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Règles & Échéanciers</span>
           </button>
 
           <button

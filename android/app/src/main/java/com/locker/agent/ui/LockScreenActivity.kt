@@ -166,10 +166,13 @@ class LockScreenActivity : Activity() {
             Toast.makeText(this, "Vérification auprès du serveur central...", Toast.LENGTH_SHORT).show()
             Thread {
                 try {
+                    val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
                     val androidId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "352965710157155"
+                    val imei = prefs.getString("assigned_imei", androidId) ?: androidId
                     val client = OkHttpClient()
                     val json = JSONObject().apply {
-                        put("imei", androidId)
+                        put("imei", imei)
+                        put("android_id", androidId)
                     }
                     val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
                     val request = Request.Builder()

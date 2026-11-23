@@ -5,9 +5,10 @@ from datetime import datetime
 
 class DeviceRegisterRequest(BaseModel):
     imei: str
+    android_id: Optional[str] = None
     serial_number: Optional[str] = None
     model: Optional[str] = "Samsung Galaxy A34 5G"
-    fcm_token: str
+    fcm_token: Optional[str] = ""
     app_version: Optional[str] = "1.0.0"
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -20,6 +21,8 @@ class DeviceRegisterRequest(BaseModel):
 
 class DeviceHeartbeatRequest(BaseModel):
     imei: str
+    android_id: Optional[str] = None
+    serial_number: Optional[str] = None
     fcm_token: Optional[str] = None
     battery_level: Optional[int] = None
     is_network_connected: Optional[bool] = True

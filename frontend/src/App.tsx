@@ -19,6 +19,7 @@ import { Navigation } from './components/Navigation';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import { LiveMapSection } from './components/LiveMapSection';
 import { LockybeeSection } from './components/LockybeeSection';
+import { RulesSection } from './components/RulesSection';
 import { PaymentModal } from './components/PaymentModal';
 import { LockScreenPreviewModal } from './components/LockScreenPreviewModal';
 import { FleetTable } from './components/FleetTable';
@@ -40,7 +41,7 @@ export function App() {
   };
 
   // Section navigation state
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'fleet' | 'map' | 'lockybee' | 'payments' | 'preview'>('dashboard');
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'fleet' | 'map' | 'lockybee' | 'payments' | 'rules' | 'preview'>('dashboard');
 
   // Core Data
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -563,7 +564,12 @@ export function App() {
           </div>
         )}
 
-        {/* ================= SECTION 6: KIOSK SIMULATOR (PREVIEW) ================= */}
+        {/* ================= SECTION 6: RÈGLES & ÉCHÉANCIERS ================= */}
+        {activeSection === 'rules' && (
+          <RulesSection apiUrl={apiUrl} theme={theme} />
+        )}
+
+        {/* ================= SECTION 7: KIOSK SIMULATOR (PREVIEW) ================= */}
         {activeSection === 'preview' && (
           <div className="space-y-6 animate-fadeIn text-center">
             <div className="max-w-lg mx-auto space-y-1">

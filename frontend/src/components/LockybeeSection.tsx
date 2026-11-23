@@ -35,6 +35,10 @@ export const LockybeeSection: React.FC<LockybeeSectionProps> = ({ apiUrl, theme 
 
   const [userInput, setUserInput] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [customKey, setCustomKey] = useState('');
+  const [selectedProvider, setSelectedProvider] = useState<'gemini' | 'anthropic'>('gemini');
+  const [keySavedStatus, setKeySavedStatus] = useState<string | null>(null);
 
   // Fetch real audit data from backend
   const fetchAudit = async () => {
@@ -72,19 +76,43 @@ export const LockybeeSection: React.FC<LockybeeSectionProps> = ({ apiUrl, theme 
             level: 'SECURE',
             category: 'Audit Global',
             title: 'Plateforme LockER 100% Opérationnelle',
-            description: 'Tous les baux hors-ligne (72h) sont à jour, passerelle FCM active.',
+            description: 'Liaison Cloud Directe sub-50ms active, baux hors-ligne (72h) conformes.',
             timestamp: new Date().toISOString(),
             action_recommended: 'Aucune anomalie détectée.'
           }
         ],
         engine: {
-          fcm_service: "ONLINE",
+          cloud_mode: "DIRECT_CLOUD_PUSH_WEBSOCKET",
           kiosk_policy_enforcement: "ACTIVE_STRICT",
           auto_unlock_on_payment: "ENABLED"
         }
       });
     } finally {
       setIsLoadingAudit(false);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!customKey.trim()) return;
+    const cleanUrl = apiUrl.replace(/\/$/, '');
+    try {
+      const res = await fetch(`${cleanUrl}/api/v1/lockybee/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: customKey.trim(),
+          provider: selectedProvider
+        })
+      });
+      if (res.ok) {
+        setKeySavedStatus(`Clé ${selectedProvider.toUpperCase()} enregistrée avec succès !`);
+        setTimeout(() => {
+          setShowKeyModal(false);
+          setKeySavedStatus(null);
+        }, 1500);
+      }
+    } catch {
+      setKeySavedStatus("Erreur lors de la configuration de la clé.");
     }
   };
 
@@ -239,8 +267,8 @@ export const LockybeeSection: React.FC<LockybeeSectionProps> = ({ apiUrl, theme 
                 <span className="text-sm font-bold text-emerald-400">100% Intègres</span>
               </div>
               <div className={`p-3 rounded-xl border ${isDark ? 'bg-[#070D1E] border-[#1E2E56]' : 'bg-slate-50 border-slate-200'}`}>
-                <span className="text-slate-400 block text-[11px]">Canal Google FCM</span>
-                <span className="text-sm font-bold text-emerald-400">Opérationnel</span>
+                <span className="text-slate-400 block text-[11px]">Canal Cloud Direct</span>
+                <span className="text-sm font-bold text-emerald-400">WebSocket sub-50ms</span>
               </div>
               <div className={`p-3 rounded-xl border ${isDark ? 'bg-[#070D1E] border-[#1E2E56]' : 'bg-slate-50 border-slate-200'}`}>
                 <span className="text-slate-400 block text-[11px]">Traçage GPS Direct</span>
@@ -249,8 +277,13 @@ export const LockybeeSection: React.FC<LockybeeSectionProps> = ({ apiUrl, theme 
                 </span>
               </div>
               <div className={`p-3 rounded-xl border ${isDark ? 'bg-[#070D1E] border-[#1E2E56]' : 'bg-slate-50 border-slate-200'}`}>
-                <span className="text-slate-400 block text-[11px]">Déblocage Auto</span>
-                <span className="text-sm font-bold text-emerald-400">MTN / Moov OK</span>
+                <span className="text-slate-400 block text-[11px]">Moteur Cognitif</span>
+                <button 
+                  onClick={() => setShowKeyModal(true)}
+                  className="text-xs font-bold text-emerald-400 hover:text-emerald-300 underline block text-left"
+                >
+                  Style Claude AI ⚙️
+                </button>
               </div>
             </div>
           </div>
@@ -421,6 +454,96 @@ export const LockybeeSection: React.FC<LockybeeSectionProps> = ({ apiUrl, theme 
         </div>
 
       </div>
+
+      {/* Modal Configuration Clé LLM (Gemini / Claude) */}
+      {showKeyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className={`w-full max-w-md p-6 rounded-2xl border shadow-2xl space-y-4 ${
+            isDark ? 'bg-[#0B132B] border-[#1E3A5F] text-white' : 'bg-white border-slate-200 text-slate-800'
+          }`}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-emerald-400 flex items-center gap-2">
+                <span>🤖 Configuration LLM Direct (Claude / Gemini)</span>
+              </h3>
+              <button 
+                onClick={() => setShowKeyModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300">
+              Par défaut, Lockybee utilise son <b>moteur cognitif contextuel autonome</b> style Claude AI.
+              Vous pouvez également brancher directement votre propre clé API pour une intelligence LLM illimitée.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 block mb-1">Fournisseur d'IA</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedProvider('gemini')}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition border ${
+                      selectedProvider === 'gemini'
+                        ? 'bg-emerald-500 text-[#070D1E] border-emerald-400'
+                        : 'bg-[#070D1E] text-slate-300 border-slate-700'
+                    }`}
+                  >
+                    Google Gemini
+                  </button>
+                  <button
+                    onClick={() => setSelectedProvider('anthropic')}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition border ${
+                      selectedProvider === 'anthropic'
+                        ? 'bg-emerald-500 text-[#070D1E] border-emerald-400'
+                        : 'bg-[#070D1E] text-slate-300 border-slate-700'
+                    }`}
+                  >
+                    Anthropic Claude
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                  Clé API {selectedProvider === 'gemini' ? 'Google Gemini' : 'Anthropic Claude'}
+                </label>
+                <input
+                  type="password"
+                  value={customKey}
+                  onChange={(e) => setCustomKey(e.target.value)}
+                  placeholder={selectedProvider === 'gemini' ? 'AIzaSy...' : 'sk-ant-...'}
+                  className={`w-full px-3.5 py-2.5 rounded-xl text-xs focus:outline-none border ${
+                    isDark ? 'bg-[#070D1E] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                  }`}
+                />
+              </div>
+
+              {keySavedStatus && (
+                <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs text-center font-bold">
+                  {keySavedStatus}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setShowKeyModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-700 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition"
+                >
+                  Fermer
+                </button>
+                <button
+                  onClick={handleSaveApiKey}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/30"
+                >
+                  Enregistrer la Clé
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

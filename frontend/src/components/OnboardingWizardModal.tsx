@@ -161,14 +161,12 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         zoomControl: true
       });
 
-      // CartoDB Tile Layer (Dark or Light)
-      const tileUrl = isDark
-        ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      // Google Maps Hybrid Satellite Layer (Véritable Imagerie Satellite)
+      const tileUrl = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
 
       L.tileLayer(tileUrl, {
-        attribution: '&copy; OpenStreetMap &copy; LockER MDM',
-        maxZoom: 19
+        attribution: '&copy; Google Maps / Earth Satellite &copy; LockER MDM',
+        maxZoom: 20
       }).addTo(map);
 
       // Custom pulsing green marker

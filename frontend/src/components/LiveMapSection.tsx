@@ -26,6 +26,7 @@ export const LiveMapSection: React.FC<LiveMapSectionProps> = ({
   const routeLayerRef = useRef<L.Polyline | null>(null);
 
   const [selectedDriverId, setSelectedDriverId] = useState<number | null>(null);
+  const [mapType, setMapType] = useState<'satellite' | 'street'>('satellite');
   const [activeRouteInfo, setActiveRouteInfo] = useState<{
     driverName: string;
     distance: string;
@@ -33,54 +34,57 @@ export const LiveMapSection: React.FC<LiveMapSectionProps> = ({
     destination: string;
   } | null>(null);
 
-  // Initialize Leaflet Map
+  // Initialize & Update Leaflet Map Layer
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
+    // Définition des flux de tuiles : Satellite Réel Google Maps vs Vue Plan
+    const getTileConfig = () => {
+      if (mapType === 'satellite') {
+        return {
+          url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+          attribution: '&copy; Google Maps / Earth Satellite &copy; LockER Bénin',
+          maxZoom: 20
+        };
+      }
+      return {
+        url: isDark
+          ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+          : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attribution: '&copy; OpenStreetMap &copy; LockER GPS',
+        maxZoom: 19
+      };
+    };
+
+    const tileConfig = getTileConfig();
+
     if (!mapInstanceRef.current) {
-      // Default center: Cotonou, Bénin
+      // Centrage par défaut Cotonou Littoral
       const map = L.map(mapContainerRef.current, {
         center: [6.3654, 2.4183],
-        zoom: 13,
+        zoom: 14,
         zoomControl: true
       });
 
-      const tileUrl = isDark
-        ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-
-      L.tileLayer(tileUrl, {
-        attribution: '&copy; OpenStreetMap &copy; LockER GPS',
-        maxZoom: 19
+      L.tileLayer(tileConfig.url, {
+        attribution: tileConfig.attribution,
+        maxZoom: tileConfig.maxZoom
       }).addTo(map);
 
       markersGroupRef.current = L.layerGroup().addTo(map);
       mapInstanceRef.current = map;
     } else {
-      // Tile layer update on theme toggle
-      const tileUrl = isDark
-        ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-
       mapInstanceRef.current.eachLayer((layer) => {
         if (layer instanceof L.TileLayer) {
           mapInstanceRef.current?.removeLayer(layer);
         }
       });
-      L.tileLayer(tileUrl, {
-        attribution: '&copy; OpenStreetMap &copy; LockER GPS',
-        maxZoom: 19
+      L.tileLayer(tileConfig.url, {
+        attribution: tileConfig.attribution,
+        maxZoom: tileConfig.maxZoom
       }).addTo(mapInstanceRef.current);
     }
-
-    return () => {
-      // Clean up map on unmount
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-    };
-  }, [isDark]);
+  }, [isDark, mapType]);
 
   // Update Markers when drivers or devices change
   useEffect(() => {
@@ -322,6 +326,9 @@ export const LiveMapSection: React.FC<LiveMapSectionProps> = ({
 
                   <div className="text-[11px] text-slate-400 space-y-0.5 font-mono">
                     <div>IMEI : {dev ? dev.imei : '352965710157155'}</div>
+                    <div className="text-[10px] text-emerald-400/90 font-semibold">
+                      📍 GPS : {(dev?.latitude || 6.3654).toFixed(5)}°N, {(dev?.longitude || 2.4183).toFixed(5)}°E
+                    </div>
                     <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
                       <span>🔋 {dev?.battery_level || 94}%</span>
                       <span>📶 {dev?.network_operator || 'MTN 5G'}</span>
@@ -345,17 +352,53 @@ export const LiveMapSection: React.FC<LiveMapSectionProps> = ({
           )}
         </div>
 
-        {/* Right Column: Full Leaflet Map */}
+        {/* Right Column: Full Leaflet Map with Real Satellite Layer */}
         <div className="lg:col-span-3 rounded-2xl border overflow-hidden shadow-2xl relative border-slate-700 min-h-[500px]">
           <div 
             ref={mapContainerRef} 
             className="w-full h-full min-h-[580px] z-0"
           />
 
-          {/* Map Overlay Badge */}
-          <div className="absolute top-4 left-4 z-10 bg-[#070D1E]/80 backdrop-blur-md px-3.5 py-2 rounded-xl border border-[#1E2E56] text-xs font-semibold text-emerald-400 shadow-lg flex items-center gap-2">
+          {/* Top Left: Map Mode Status */}
+          <div className="absolute top-4 left-4 z-10 bg-[#070D1E]/85 backdrop-blur-md px-3.5 py-2 rounded-xl border border-[#1E2E56] text-xs font-semibold text-emerald-400 shadow-lg flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
-            <span>Flux Télémétrique GPS H24 Actif</span>
+            <span>{mapType === 'satellite' ? '🛰️ Vue Satellite Réelle (Google Earth)' : '🗺️ Vue Plan Routier'}</span>
+          </div>
+
+          {/* Top Right: Layer Switcher Toggle */}
+          <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5 p-1 rounded-xl bg-[#070D1E]/90 backdrop-blur-md border border-[#1E2E56] shadow-2xl">
+            <button
+              onClick={() => setMapType('satellite')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                mapType === 'satellite'
+                  ? 'bg-emerald-500 text-[#070D1E] shadow-lg shadow-emerald-500/30'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              <span>🛰️ Satellite Réel</span>
+            </button>
+            <button
+              onClick={() => setMapType('street')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                mapType === 'street'
+                  ? 'bg-emerald-500 text-[#070D1E] shadow-lg shadow-emerald-500/30'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              <span>🗺️ Plan</span>
+            </button>
+          </div>
+
+          {/* Bottom Left: Real GPS Coordinates Telemetry Badge */}
+          <div className="absolute bottom-4 left-4 z-10 bg-[#070D1E]/90 backdrop-blur-md px-3.5 py-2 rounded-xl border border-[#1E2E56] text-xs font-mono text-slate-200 shadow-xl flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>GPS Matériel Téléphone :</span>
+            </div>
+            <span className="text-white font-bold">
+              {((selectedDriverId && devices[selectedDriverId]?.latitude) || (drivers[0] && devices[drivers[0].id]?.latitude) || 6.3654).toFixed(6)}° N, {((selectedDriverId && devices[selectedDriverId]?.longitude) || (drivers[0] && devices[drivers[0].id]?.longitude) || 2.4183).toFixed(6)}° E
+            </span>
+            <span className="text-emerald-400 text-[10px] hidden sm:inline">• Signal Fixé</span>
           </div>
         </div>
 

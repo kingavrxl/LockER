@@ -38,6 +38,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvSerial: TextView
     private lateinit var tvFcmToken: TextView
     private lateinit var tvAdminStatus: TextView
+    private lateinit var tvGpsCoords: TextView
     private lateinit var btnSyncNow: Button
     private lateinit var btnRequestAdmin: Button
 
@@ -83,25 +84,19 @@ class MainActivity : AppCompatActivity() {
         refreshIdentifiers()
         setupListeners()
         syncWithCloud()
+        updateLiveGps()
 
         // Si l'application est déjà Device Owner ou Admin, appliquer les politiques silencieusement
         if (dpm.isDeviceOwnerApp(packageName)) {
             policyManager.setupDeviceOwnerPolicies()
         }
-
-        // Fermer silencieusement l'interface après 1.5 seconde pour ne pas déranger l'utilisateur
-        tvCloudStatus.postDelayed({
-            if (!isFinishing && !getSharedPreferences("locker_prefs", Context.MODE_PRIVATE).getBoolean("is_locked", false)) {
-                moveTaskToBack(true)
-                finish()
-            }
-        }, 1500)
     }
 
     override fun onResume() {
         super.onResume()
         refreshIdentifiers()
         syncWithCloud()
+        updateLiveGps()
     }
 
     private fun initViews() {
@@ -111,10 +106,35 @@ class MainActivity : AppCompatActivity() {
         tvSerial = findViewById(R.id.tvSerial)
         tvFcmToken = findViewById(R.id.tvFcmToken)
         tvAdminStatus = findViewById(R.id.tvAdminStatus)
+        tvGpsCoords = findViewById(R.id.tvGpsCoords)
         btnSyncNow = findViewById(R.id.btnSyncNow)
         btnRequestAdmin = findViewById(R.id.btnRequestAdmin)
 
         tvModel.text = "Modèle : ${Build.MANUFACTURER} ${Build.MODEL}".trim()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun updateLiveGps() {
+        try {
+            val lm = getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager ?: return
+            var loc: android.location.Location? = null
+            if (lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) {
+                loc = lm.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
+            }
+            if (loc == null && lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)) {
+                loc = lm.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
+            }
+
+            if (loc != null) {
+                tvGpsCoords.text = "🛰️ GPS Matériel : ${String.format("%.5f", loc.latitude)}° N, ${String.format("%.5f", loc.longitude)}° E"
+                tvGpsCoords.setTextColor(Color.parseColor("#10B981"))
+            } else {
+                tvGpsCoords.text = "🛰️ GPS Matériel : En attente du signal satellite..."
+                tvGpsCoords.setTextColor(Color.parseColor("#F59E0B"))
+            }
+        } catch (e: Exception) {
+            tvGpsCoords.text = "🛰️ GPS Matériel : Actif en arrière-plan"
+        }
     }
 
     private fun setupListeners() {
@@ -229,8 +249,11 @@ class MainActivity : AppCompatActivity() {
         Thread {
             try {
                 val client = OkHttpClient()
+                val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
                 val json = JSONObject().apply {
                     put("imei", currentImei)
+                    put("android_id", androidId)
+                    put("serial_number", if (serialDetected.isNotBlank() && serialDetected != Build.UNKNOWN) serialDetected else androidId)
                     put("model", "${Build.MANUFACTURER} ${Build.MODEL}".trim())
                     put("fcm_token", currentFcmToken)
                     put("app_version", "1.0.0")
@@ -244,6 +267,22 @@ class MainActivity : AppCompatActivity() {
 
                 val response = client.newCall(request).execute()
                 val isSuccess = response.isSuccessful
+                val responseString = response.body?.string() ?: ""
+
+                if (isSuccess && responseString.isNotBlank()) {
+                    try {
+                        val respObj = JSONObject(responseString)
+                        val returnedImei = respObj.optString("imei", "")
+                        if (returnedImei.isNotBlank()) {
+                            getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
+                                .edit()
+                                .putString("assigned_imei", returnedImei)
+                                .apply()
+                        }
+                    } catch (e: Exception) {
+                        Log.w("MainActivity", "Erreur parse reponse: ${e.message}")
+                    }
+                }
 
                 runOnUiThread {
                     if (isSuccess) {

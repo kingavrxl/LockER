@@ -46,6 +46,9 @@ class LockerPolicyManager(private val context: Context) {
             val perms = arrayOf(
                 Manifest.permission.READ_PHONE_STATE,
                 Manifest.permission.CALL_PHONE,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                "android.permission.ACCESS_BACKGROUND_LOCATION",
                 "android.permission.READ_PHONE_NUMBERS",
                 "android.permission.POST_NOTIFICATIONS"
             )
@@ -68,16 +71,13 @@ class LockerPolicyManager(private val context: Context) {
             )
             dpm.setLockTaskPackages(adminComponent, allowedPackages)
 
-            // 3. Empêcher la réinitialisation d'usine, le mode sans échec et la désinstallation
+            // 3. Empêcher l'extinction, le redémarrage, le mode sans échec et la désinstallation
+            // LOCK_TASK_FEATURE_NONE neutralise complètement le menu Power (extinction / redémarrage indisponible)
+            dpm.setLockTaskFeatures(adminComponent, DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET)
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT)
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_UNINSTALL_APPS)
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_ADD_USER)
-
-            // 4. Activer les touches physiques (Power/Volume) et l'accès d'urgence
-            val lockTaskFeatures = DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS or
-                    DevicePolicyManager.LOCK_TASK_FEATURE_KEYGUARD
-            dpm.setLockTaskFeatures(adminComponent, lockTaskFeatures)
 
             Log.i(TAG, "Politiques Device Owner configurées avec succès.")
         } catch (e: Exception) {
