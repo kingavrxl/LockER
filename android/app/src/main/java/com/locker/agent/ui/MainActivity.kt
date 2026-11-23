@@ -8,8 +8,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.telephony.TelephonyManager
 import android.util.Log
@@ -21,6 +23,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
+import com.locker.agent.LockerApp
 import com.locker.agent.R
 import com.locker.agent.manager.LockerPolicyManager
 import com.locker.agent.receiver.LockerDeviceAdminReceiver
@@ -46,7 +49,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dpm: DevicePolicyManager
     private lateinit var adminComponent: ComponentName
 
-    private var currentImei: String = "352965710157155"
+    private var currentImei: String = ""
+    private var serialDetected: String = ""
     private var currentFcmToken: String = ""
 
     companion object {
@@ -58,7 +62,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Si le téléphone est verrouillé, basculer directement sur le LockScreen
+        // Si le téléphone est actuellement verrouillé, basculer directement sur le LockScreen
         val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
         if (prefs.getBoolean("is_locked", false)) {
             val intent = Intent(this, LockScreenActivity::class.java).apply {
@@ -77,18 +81,29 @@ class MainActivity : AppCompatActivity() {
         dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         adminComponent = LockerDeviceAdminReceiver.getComponentName(this)
 
-        // Démarrer immédiatement le service permanent
-        com.locker.agent.service.LockerPersistentService.start(this)
-
         initViews()
+        requestAppPermissions()
+        requestBatteryOptimizationExemption()
+
+        // Démarrer immédiatement le service d'arrière-plan permanent
+        try {
+            com.locker.agent.service.LockerPersistentService.start(this)
+        } catch (e: Exception) {
+            Log.w("MainActivity", "Erreur lancement service: ${e.message}")
+        }
+
         refreshIdentifiers()
         setupListeners()
         syncWithCloud()
         updateLiveGps()
 
-        // Si l'application est déjà Device Owner ou Admin, appliquer les politiques silencieusement
-        if (dpm.isDeviceOwnerApp(packageName)) {
-            policyManager.setupDeviceOwnerPolicies()
+        // Si l'application est déjà Device Owner, appliquer les politiques silencieusement
+        try {
+            if (dpm.isDeviceOwnerApp(packageName)) {
+                policyManager.setupDeviceOwnerPolicies()
+            }
+        } catch (e: Exception) {
+            Log.w("MainActivity", "setupDeviceOwnerPolicies: ${e.message}")
         }
     }
 
@@ -111,6 +126,22 @@ class MainActivity : AppCompatActivity() {
         btnRequestAdmin = findViewById(R.id.btnRequestAdmin)
 
         tvModel.text = "Modèle : ${Build.MANUFACTURER} ${Build.MODEL}".trim()
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                if (pm != null && !pm.isIgnoringBatteryOptimizations(packageName)) {
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("MainActivity", "requestBatteryOptimizationExemption: ${e.message}")
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -161,6 +192,9 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
             needed.add(Manifest.permission.CALL_PHONE)
         }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_NUMBERS) != PackageManager.PERMISSION_GRANTED) {
                 needed.add(Manifest.permission.READ_PHONE_NUMBERS)
@@ -180,8 +214,8 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("HardwareIds")
     private fun refreshIdentifiers() {
         // 1. Statut Administrateur
-        val isDeviceOwner = dpm.isDeviceOwnerApp(packageName)
-        val isAdminActive = dpm.isAdminActive(adminComponent)
+        val isDeviceOwner = try { dpm.isDeviceOwnerApp(packageName) } catch (e: Exception) { false }
+        val isAdminActive = try { dpm.isAdminActive(adminComponent) } catch (e: Exception) { false }
 
         if (isDeviceOwner) {
             tvAdminStatus.text = "● Droits MDM : Device Owner ACTIF (Protection maximale)"
@@ -209,41 +243,54 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } catch (e: Exception) {
-            Log.w("MainActivity", "Erreur lecture IMEI direct: ${e.message}")
+            Log.d("MainActivity", "Lecture IMEI: ${e.message}")
         }
 
         // 3. Détection Numéro de Série
-        var serialDetected = ""
+        serialDetected = ""
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                serialDetected = Build.getSerial()
+                serialDetected = Build.getSerial() ?: ""
             }
         } catch (e: Exception) {
-            Log.w("MainActivity", "Erreur lecture Série: ${e.message}")
+            Log.d("MainActivity", "Lecture Série: ${e.message}")
         }
 
         val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
 
-        currentImei = if (imeiDetected.isNotBlank()) imeiDetected else if (androidId.isNotBlank()) androidId else "352965710157155"
+        val app = application as? LockerApp
+        currentImei = if (imeiDetected.isNotBlank()) {
+            imeiDetected
+        } else if (serialDetected.isNotBlank() && serialDetected != Build.UNKNOWN) {
+            serialDetected
+        } else if (androidId.isNotBlank()) {
+            androidId
+        } else {
+            app?.resolveDeviceImei() ?: "TERMINAL_ANDROID"
+        }
 
         tvImei.text = "IMEI / Identifiant : $currentImei"
-        tvSerial.text = "Série : ${if (serialDetected.isNotBlank() && serialDetected != Build.UNKNOWN) serialDetected else androidId}"
+        tvSerial.text = "Série : ${if (serialDetected.isNotBlank() && serialDetected != Build.UNKNOWN) serialDetected else (if (androidId.isNotBlank()) androidId else "-")}"
 
         // 4. Token FCM Google
-        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (task.isSuccessful) {
-                currentFcmToken = task.result
-                tvFcmToken.text = "Jeton FCM Google : ${currentFcmToken.take(16)}... (Actif)"
-                tvFcmToken.setTextColor(Color.parseColor("#10B981"))
-            } else {
-                tvFcmToken.text = "Jeton FCM Google : Échec (${task.exception?.message})"
-                tvFcmToken.setTextColor(Color.parseColor("#EF4444"))
+        try {
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    currentFcmToken = task.result ?: ""
+                    tvFcmToken.text = "Jeton FCM Google : ${currentFcmToken.take(16)}... (Actif)"
+                    tvFcmToken.setTextColor(Color.parseColor("#10B981"))
+                } else {
+                    tvFcmToken.text = "Jeton FCM Google : En attente"
+                    tvFcmToken.setTextColor(Color.parseColor("#CBD5E1"))
+                }
             }
+        } catch (e: Exception) {
+            tvFcmToken.text = "Jeton FCM Google : Initialisation..."
         }
     }
 
     private fun syncWithCloud() {
-        tvCloudStatus.text = "● Synchronisation avec Render en cours..."
+        tvCloudStatus.text = "● Synchronisation avec le Cloud..."
         tvCloudStatus.setTextColor(Color.parseColor("#F59E0B"))
 
         Thread {
@@ -280,13 +327,13 @@ class MainActivity : AppCompatActivity() {
                                 .apply()
                         }
                     } catch (e: Exception) {
-                        Log.w("MainActivity", "Erreur parse reponse: ${e.message}")
+                        Log.d("MainActivity", "Parse reponse: ${e.message}")
                     }
                 }
 
                 runOnUiThread {
                     if (isSuccess) {
-                        tvCloudStatus.text = "● Connecté au Serveur Cloud LockER (Bénin)"
+                        tvCloudStatus.text = "● Connecté au Serveur Cloud LockER"
                         tvCloudStatus.setTextColor(Color.parseColor("#10B981"))
                     } else {
                         tvCloudStatus.text = "● Erreur Serveur (HTTP ${response.code})"

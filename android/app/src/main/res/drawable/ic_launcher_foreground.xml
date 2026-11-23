@@ -1,0 +1,35 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group>
+        <!-- Shield Background Contour in Emerald Green -->
+        <path
+            android:fillColor="#10B981"
+            android:pathData="M54,24 C40,24 35,32 35,32 L35,56 C35,72 54,84 54,84 C54,84 73,72 73,56 L73,32 C73,32 68,24 54,24 Z" />
+
+        <!-- Inner Shield Accent in Darker Green -->
+        <path
+            android:fillColor="#059669"
+            android:pathData="M54,27 C42,27 38,34 38,34 L38,55 C38,68 54,79 54,79 C54,79 70,68 70,55 L70,34 C70,34 66,27 54,27 Z" />
+
+        <!-- Padlock Shackle in Pure White -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="3.5"
+            android:strokeLineCap="round"
+            android:pathData="M48,48 L48,43 C48,39.68 50.68,37 54,37 C57.32,37 60,39.68 60,43 L60,48" />
+
+        <!-- Padlock Body in Pure White -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M45,47 L63,47 C64.65,47 66,48.35 66,50 L66,61 C66,62.65 64.65,64 63,64 L45,64 C43.35,64 42,62.65 42,61 L42,50 C42,48.35 43.35,47 45,47 Z" />
+
+        <!-- Keyhole in Deep Night Blue -->
+        <path
+            android:fillColor="#070D1E"
+            android:pathData="M54,52 C52.9,52 52,52.9 52,54 C52,54.7 52.4,55.3 53,55.7 L53,59 L55,59 L55,55.7 C55.6,55.3 56,54.7 56,54 C56,52.9 55.1,52 54,52 Z" />
+    </group>
+</vector>

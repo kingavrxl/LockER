@@ -7,7 +7,7 @@ class DeviceRegisterRequest(BaseModel):
     imei: str
     android_id: Optional[str] = None
     serial_number: Optional[str] = None
-    model: Optional[str] = "Samsung Galaxy A34 5G"
+    model: Optional[str] = "Smartphone Android"
     fcm_token: Optional[str] = ""
     app_version: Optional[str] = "1.0.0"
     latitude: Optional[float] = None
@@ -40,13 +40,13 @@ class DeviceOut(BaseModel):
     model: str
     is_locked: bool
     lock_reason: Optional[str] = None
-    latitude: Optional[float] = 6.3654
-    longitude: Optional[float] = 2.4183
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     ip_address: Optional[str] = None
     mac_address: Optional[str] = None
-    network_operator: Optional[str] = "MTN Bénin"
+    network_operator: Optional[str] = None
     wifi_ssid: Optional[str] = None
-    battery_level: Optional[int] = 100
+    battery_level: Optional[int] = None
     last_heartbeat: Optional[datetime] = None
     lease_expires_at: Optional[datetime] = None
     created_at: datetime

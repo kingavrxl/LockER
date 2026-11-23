@@ -266,7 +266,7 @@ export const RulesSection: React.FC<RulesSectionProps> = ({ apiUrl, theme }) => 
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Ex: Échéance Mensuelle Samsung A34"
+                  placeholder="Ex: Échéance Mensuelle Flotte"
                   className={`w-full px-3.5 py-2.5 rounded-xl text-xs border focus:outline-none ${
                     isDark ? 'bg-[#070D1E] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
                   }`}

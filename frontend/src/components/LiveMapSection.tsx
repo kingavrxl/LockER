@@ -127,9 +127,9 @@ export const LiveMapSection: React.FC<LiveMapSectionProps> = ({
           </div>
           <b>${driver.full_name}</b><br/>
           Plaque : ${driver.vehicle_plate || 'RB-Benin'}<br/>
-          IMEI : <span style="font-family: monospace;">${dev ? dev.imei : '352965710157155'}</span><br/>
-          Opérateur : ${dev?.network_operator || 'MTN Bénin'}<br/>
-          Batterie : ${dev?.battery_level || 94}%<br/>
+          IMEI : <span style="font-family: monospace;">${dev ? dev.imei : '-'}</span><br/>
+          Opérateur : ${dev?.network_operator || '-'}<br/>
+          Batterie : ${dev?.battery_level != null ? `${dev.battery_level}%` : '-'}<br/>
           Statut : <b>${driver.current_status}</b>
         </div>
       `);
@@ -186,7 +186,7 @@ export const LiveMapSection: React.FC<LiveMapSectionProps> = ({
       driverName: driver.full_name,
       distance: `${distKm} km`,
       duration: `${durationMin} min (Trafic fluide)`,
-      destination: `${driver.vehicle_plate || 'RB-Bénin'} - ${dev?.model || 'Samsung A34'}`
+      destination: `${driver.vehicle_plate || 'RB-Bénin'} - ${dev?.model || 'Terminal Android'}`
     });
   };
 
@@ -204,7 +204,7 @@ export const LiveMapSection: React.FC<LiveMapSectionProps> = ({
                 Cartographie & Traçabilité GPS en Direct
               </h2>
               <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                Visualisation en temps réel de la flotte Samsung Galaxy A34 au Bénin avec itinéraire dynamique
+                Visualisation en temps réel de la flotte au Bénin avec itinéraire dynamique
               </p>
             </div>
           </div>
@@ -325,13 +325,13 @@ export const LiveMapSection: React.FC<LiveMapSectionProps> = ({
                   </div>
 
                   <div className="text-[11px] text-slate-400 space-y-0.5 font-mono">
-                    <div>IMEI : {dev ? dev.imei : '352965710157155'}</div>
+                    <div>IMEI : {dev ? dev.imei : '-'}</div>
                     <div className="text-[10px] text-emerald-400/90 font-semibold">
-                      📍 GPS : {(dev?.latitude || 6.3654).toFixed(5)}°N, {(dev?.longitude || 2.4183).toFixed(5)}°E
+                      📍 GPS : {dev?.latitude ? `${dev.latitude.toFixed(5)}°N, ${dev.longitude?.toFixed(5)}°E` : 'En attente signal'}
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
-                      <span>🔋 {dev?.battery_level || 94}%</span>
-                      <span>📶 {dev?.network_operator || 'MTN 5G'}</span>
+                      <span>🔋 {dev?.battery_level != null ? `${dev.battery_level}%` : '-'}</span>
+                      <span>📶 {dev?.network_operator || '-'}</span>
                     </div>
                   </div>
 

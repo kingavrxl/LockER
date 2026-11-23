@@ -29,9 +29,9 @@ export const LockScreenPreviewModal: React.FC<LockScreenPreviewModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const driverName = driver?.full_name || 'Bio Gado (Chauffeur Cotonou)';
-  const vehicle = driver?.vehicle_plate || 'RB-8492-Littoral';
-  const imei = device?.imei || '352965710157155';
+  const driverName = driver?.full_name || 'Conducteur Flotte';
+  const vehicle = driver?.vehicle_plate || 'RB-Bénin';
+  const imei = device?.imei || 'Non renseigné';
   const dailyRate = driver?.daily_rate_xof || 5000;
 
   return (
@@ -46,7 +46,7 @@ export const LockScreenPreviewModal: React.FC<LockScreenPreviewModalProps> = ({
           <X className="w-6 h-6" />
         </button>
 
-        {/* Realistic Samsung Galaxy A34 5G Phone Bezel */}
+        {/* Realistic Smartphone Bezel */}
         <div className="w-[320px] sm:w-[350px] h-[660px] bg-[#0E1526] rounded-[48px] p-3 shadow-2xl border-4 border-[#2A3B5E] relative flex flex-col shadow-emerald-500/10">
           
           {/* Top Speaker & Camera Punch Hole */}
@@ -151,7 +151,7 @@ export const LockScreenPreviewModal: React.FC<LockScreenPreviewModalProps> = ({
 
               {/* Watermark & Legal Footer */}
               <div className="text-[10px] text-slate-500 font-mono pt-1">
-                IMEI : {imei.slice(0, 8)}**** • Samsung A34 5G
+                IMEI : {imei.length > 8 ? imei.slice(0, 8) + '****' : imei} • {device?.model || 'Smartphone Android'}
               </div>
 
             </div>
@@ -164,7 +164,7 @@ export const LockScreenPreviewModal: React.FC<LockScreenPreviewModalProps> = ({
         </div>
 
         <p className="text-xs text-slate-400 mt-3 text-center">
-          Aperçu direct de l'affichage Kiosk Samsung Galaxy A34 sous verrouillage.
+          Aperçu direct de l'affichage Kiosk sous verrouillage.
         </p>
 
       </div>

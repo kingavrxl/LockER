@@ -44,23 +44,42 @@ class LockerPersistentService : Service() {
         private const val HEARTBEAT_URL = "https://locker-2nuk.onrender.com/api/v1/devices/heartbeat"
 
         fun start(context: Context) {
-            val intent = Intent(context, LockerPersistentService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                val intent = Intent(context, LockerPersistentService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "startForegroundService exception: ${e.message}", e)
             }
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        policyManager = LockerPolicyManager(this)
-        createNotificationChannel()
-        startForeground(NOTIF_ID, buildForegroundNotification())
-        startHeartbeatLoop()
-        startCloudWebSocket()
-        Log.i(TAG, "LockerPersistentService démarré en premier plan permanent (Mode Cloud Unifié).")
+        try {
+            policyManager = LockerPolicyManager(this)
+            createNotificationChannel()
+
+            val notification = buildForegroundNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIF_ID, 
+                    notification, 
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                startForeground(NOTIF_ID, notification)
+            }
+
+            startHeartbeatLoop()
+            startCloudWebSocket()
+            Log.i(TAG, "LockerPersistentService démarré en premier plan permanent (Mode Cloud Unifié).")
+        } catch (e: Exception) {
+            Log.e(TAG, "Erreur critique dans onCreate service: ${e.message}", e)
+        }
     }
 
     private fun startCloudWebSocket() {
@@ -251,10 +270,10 @@ class LockerPersistentService : Service() {
                 if (!imei.isNullOrBlank()) return imei
             }
         } catch (e: Exception) {
-            // Permission ou non-device owner
+            // Permission
         }
         val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-        return if (!androidId.isNullOrBlank()) androidId else "352965710157155"
+        return if (!androidId.isNullOrBlank()) androidId else "TERMINAL_ANDROID"
     }
 
     private fun getStoredFcmToken(): String {

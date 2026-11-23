@@ -40,12 +40,12 @@ async def main():
         test_device = Device(
             driver_id=driver_id,
             imei="352889110022334",
-            model="Samsung Galaxy A34 5G",
-            fcm_token="fake_fcm_token_device_owner_a34"
+            model="Smartphone Android",
+            fcm_token="fake_fcm_token_device_owner"
         )
         session.add(test_device)
         await session.commit()
-        print("   [OK] Appareil Samsung A34 associé.")
+        print("   [OK] Appareil Android associé.")
 
     print("3. Test du verrouillage automatique (J+3 impayé)...")
     async with AsyncSessionLocal() as session:

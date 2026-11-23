@@ -150,13 +150,13 @@ class LockybeeService:
         }
 
     _custom_api_key: Optional[str] = None
-    _provider_type: Optional[str] = None  # "gemini", "anthropic", "openai"
+    _provider_type: Optional[str] = None
 
     @classmethod
     def set_custom_llm_key(cls, key: str, provider: str = "gemini"):
         cls._custom_api_key = key.strip()
         cls._provider_type = provider.lower()
-        logger.info(f"[Lockybee] Clé LLM dynamique configurée avec succès pour le fournisseur : {provider}")
+        logger.info(f"[Lockybee] Clé LLM dynamique configurée pour : {provider}")
 
     @classmethod
     def get_llm_config(cls) -> Dict[str, Any]:
@@ -180,47 +180,29 @@ class LockybeeService:
 
     @staticmethod
     async def _call_external_llm(system_prompt: str, user_query: str) -> Optional[str]:
-        """
-        Appel direct à l'API LLM (Google Gemini, Anthropic Claude ou OpenAI).
-        """
         gemini_key = LockybeeService._custom_api_key if LockybeeService._provider_type == "gemini" else (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
         anthropic_key = LockybeeService._custom_api_key if LockybeeService._provider_type == "anthropic" else os.getenv("ANTHROPIC_API_KEY")
         openai_key = LockybeeService._custom_api_key if LockybeeService._provider_type == "openai" else os.getenv("OPENAI_API_KEY")
 
-        # 1. Google Gemini (1.5 Flash ou 2.0 Flash)
         if gemini_key:
             try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
                 payload = {
-                    "contents": [
-                        {
-                            "role": "user",
-                            "parts": [{"text": f"{system_prompt}\n\n[ADMINISTRATEUR LOCKER] : {user_query}"}]
-                        }
-                    ],
-                    "generationConfig": {
-                        "temperature": 0.4,
-                        "maxOutputTokens": 1000
-                    }
+                    "contents": [{"role": "user", "parts": [{"text": f"{system_prompt}\n\n[ADMINISTRATEUR] : {user_query}"}]}],
+                    "generationConfig": {"temperature": 0.4, "maxOutputTokens": 1000}
                 }
                 async with httpx.AsyncClient(timeout=15.0) as client:
                     resp = await client.post(url, json=payload)
                     if resp.status_code == 200:
                         data = resp.json()
-                        text = data["candidates"][0]["content"]["parts"][0]["text"]
-                        return text.strip()
+                        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
             except Exception as e:
                 logger.warning(f"[Lockybee LLM] Erreur appel Gemini: {e}")
 
-        # 2. Anthropic Claude (Claude 3.5 Sonnet)
         if anthropic_key:
             try:
                 url = "https://api.anthropic.com/v1/messages"
-                headers = {
-                    "x-api-key": anthropic_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json"
-                }
+                headers = {"x-api-key": anthropic_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
                 payload = {
                     "model": "claude-3-5-sonnet-20241022",
                     "max_tokens": 1000,
@@ -231,33 +213,24 @@ class LockybeeService:
                     resp = await client.post(url, headers=headers, json=payload)
                     if resp.status_code == 200:
                         data = resp.json()
-                        text = data["content"][0]["text"]
-                        return text.strip()
+                        return data["content"][0]["text"].strip()
             except Exception as e:
                 logger.warning(f"[Lockybee LLM] Erreur appel Anthropic: {e}")
 
-        # 3. OpenAI (GPT-4o)
         if openai_key:
             try:
                 url = "https://api.openai.com/v1/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {openai_key}",
-                    "Content-type": "application/json"
-                }
+                headers = {"Authorization": f"Bearer {openai_key}", "Content-type": "application/json"}
                 payload = {
                     "model": "gpt-4o-mini",
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_query}
-                    ],
+                    "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_query}],
                     "temperature": 0.4
                 }
                 async with httpx.AsyncClient(timeout=15.0) as client:
                     resp = await client.post(url, headers=headers, json=payload)
                     if resp.status_code == 200:
                         data = resp.json()
-                        text = data["choices"][0]["message"]["content"]
-                        return text.strip()
+                        return data["choices"][0]["message"]["content"].strip()
             except Exception as e:
                 logger.warning(f"[Lockybee LLM] Erreur appel OpenAI: {e}")
 
@@ -265,17 +238,9 @@ class LockybeeService:
 
     @staticmethod
     async def chat_with_lockybee(query: str, db: AsyncSession) -> Dict[str, Any]:
-        """
-        Moteur conversationnel avancé de Lockybee :
-        1. Capacité d'apprentissage permanent ('Apprends que...', 'Retiens que...', 'Nouvelle règle...')
-        2. Obéissance stricte aux ordres ('Ne fait que ce qu'on lui dit')
-        3. Intelligence de raisonnement contextuel style Claude AI
-        4. Exécution directe des ordres validés par l'administrateur
-        """
         raw_query = query.strip()
         q_lower = raw_query.lower()
 
-        # Récupérer les données de contexte
         drivers_res = await db.execute(select(Driver))
         drivers = drivers_res.scalars().all()
 
@@ -289,9 +254,7 @@ class LockybeeService:
         metrics = audit_data["metrics"]
         score = audit_data["security_score"]
 
-        # =========================================================================
-        # 1. RÈGLES & ÉCHÉANCIERS (Jour / Mois / An et Comment Payer)
-        # =========================================================================
+        # 1. RÈGLES & ÉCHÉANCIERS
         rule_triggers = [
             "nouvelle règle", "nouvelle regle", "ajoute une règle", "ajoute une regle", 
             "ajouter une règle", "ajouter une regle", "nouvel échéancier", "nouvel echeancier", 
@@ -300,7 +263,6 @@ class LockybeeService:
         ]
 
         if any(trig in q_lower for trig in rule_triggers):
-            # Extraction de la date (JJ/MM/AAAA ou Jour/Mois)
             date_match = re.search(r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})', raw_query)
             day_match = re.search(r'(?:le|chaque)\s+(\d{1,2})(?:er)?\s+(?:du|de chaque)\s+mois', q_lower)
             
@@ -315,7 +277,6 @@ class LockybeeService:
             else:
                 due_date_str = "Échéance personnalisée"
 
-            # Extraction du montant (FCFA) sans confusion avec la date
             query_without_date = re.sub(r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}', '', q_lower)
             amount_match_unit = re.search(r'(\d+[\s\d]*)\s*(?:fcfa|f|xof)\b', query_without_date)
             amount_match_any = re.search(r'(?:de|montant|somme)\s*(\d+[\s\d]*)', query_without_date)
@@ -326,7 +287,6 @@ class LockybeeService:
             else:
                 extracted_amount = settings.DAILY_PAYMENT_AMOUNT_XOF
 
-            # Extraction de la méthode de paiement (Comment payer)
             if "mtn" in q_lower and "moov" in q_lower:
                 payment_method = "🟡 MTN Mobile Money (*133#) & 🔵 Moov Money (*880#)"
             elif "moov" in q_lower:
@@ -363,7 +323,7 @@ class LockybeeService:
                 f"• **Échéance (Jour / Mois / An) :** `{due_date_str}`\n"
                 f"• **Montant du Versement :** `{extracted_amount:,} FCFA`\n"
                 f"• **Comment Payer :** {payment_method}\n"
-                f"• **Conséquence Antivol :** Si non payé après `3 jours` d'impayé, le terminal Samsung Galaxy A34 est automatiquement verrouillé en mode Kiosk.\n"
+                f"• **Conséquence Antivol :** Si non payé après `3 jours` d'impayé, le terminal Android est automatiquement verrouillé en mode Kiosk.\n"
                 f"• **Déverrouillage :** Instantané dès paiement Mobile Money.\n\n"
                 f"🛡️ *La règle est active immédiatement sur toute la flotte.*"
             )
@@ -401,9 +361,7 @@ class LockybeeService:
             suggestions = ["Ajouter une règle", "Statut de la flotte", "Fais un audit"]
             return {"reply": reply, "suggestions": suggestions, "status": "online"}
 
-        # =========================================================================
-        # 2. DÉTECTION D'ORDRE D'APPRENTISSAGE GÉNÉRAL ("Apprends que...", "Retiens que...")
-        # =========================================================================
+        # 2. DÉTECTION D'ORDRE D'APPRENTISSAGE
         learn_triggers = [
             "apprends que", "apprend que", "retiens que", "mémorise que", "memorise que", 
             "ajoute cette consigne", "note que", "à partir de maintenant", "a partir de maintenant", "consigne :"
@@ -440,9 +398,7 @@ class LockybeeService:
                     "status": "online"
                 }
 
-        # =========================================================================
-        # 2. CONSULTATION DE LA MÉMOIRE ("Qu'as-tu appris ?", "Montre tes consignes")
-        # =========================================================================
+        # 3. CONSULTATION DE LA MÉMOIRE
         if any(w in q_lower for w in ["appris", "ta mémoire", "ta memoire", "tes consignes", "directives", "ce que tu sais"]):
             if learned_memories:
                 memory_lines = [f"{i+1}. « *{m.content}* » *(Enregistré le {m.created_at.strftime('%d/%m/%Y à %H:%M')})*" for i, m in enumerate(learned_memories)]
@@ -455,16 +411,13 @@ class LockybeeService:
                 reply = (
                     "🧠 **Ma mémoire est actuellement vierge de consigne personnalisée.**\n\n"
                     "Vous pouvez m'enseigner une règle à tout moment en me disant par exemple :\n"
-                    "• « *Apprends que le chauffeur Bio Gado a une dérogation jusqu'à vendredi* »\n"
+                    "• « *Apprends que le chauffeur a une dérogation jusqu'à vendredi* »\n"
                     "• « *Retiens que le numéro prioritaire de la flotte est le +229...* »"
                 )
             suggestions = ["Fais un audit de la flotte", "Statut de la plateforme", "Ajouter une règle"]
             return {"reply": reply, "suggestions": suggestions, "status": "online"}
 
-        # =========================================================================
-        # 3. EXÉCUTION D'ORDRES DIRECTS DE L'ADMINISTRATEUR (Obéissance Stricte)
-        # =========================================================================
-        # Ordre : Verrouiller un chauffeur
+        # 4. EXÉCUTION D'ORDRES DIRECTS DE L'ADMINISTRATEUR
         if ("verrouille" in q_lower or "bloque" in q_lower) and not any(w in q_lower for w in ["combien", "pourquoi", "qui", "liste", "comment"]):
             target_driver = None
             for d in drivers:
@@ -487,7 +440,6 @@ class LockybeeService:
                 suggestions = ["Débloquer le chauffeur", "Statut de la flotte", "Audit de sécurité"]
                 return {"reply": reply, "suggestions": suggestions, "action_executed": "LOCK", "status": "online"}
 
-        # Ordre : Déverrouiller un chauffeur
         if ("déverrouille" in q_lower or "deverrouille" in q_lower or "débloque" in q_lower or "debloque" in q_lower) and not any(w in q_lower for w in ["combien", "comment"]):
             target_driver = None
             for d in drivers:
@@ -510,31 +462,13 @@ class LockybeeService:
                 suggestions = ["Statut de la flotte", "Rapport d'audit", "Voir les paiements"]
                 return {"reply": reply, "suggestions": suggestions, "action_executed": "UNLOCK", "status": "online"}
 
-        # Ordre : Modifier le tarif journalier
-        if any(w in q_lower for w in ["change le tarif", "modifier tarif", "mettre le tarif à", "passer le tarif à"]):
-            rate_match = re.search(r'(\d+[\s\d]*)\s*(?:fcfa|f|xof)?', q_lower)
-            if rate_match:
-                new_rate = int(rate_match.group(1).replace(" ", ""))
-                for d in drivers:
-                    d.daily_rate_xof = new_rate
-                await db.commit()
-                reply = (
-                    f"💳 **Ordre exécuté avec succès :**\n\n"
-                    f"Le tarif journalier a été actualisé à **{new_rate:,} FCFA / jour** pour tous les chauffeurs de la flotte.\n"
-                    f"Les prochains versements Mobile Money (MTN / Moov) appliqueront ce nouveau montant."
-                )
-                suggestions = ["Statut de la flotte", "Audit de sécurité", "Voir les conducteurs"]
-                return {"reply": reply, "suggestions": suggestions, "action_executed": "UPDATE_RATE", "status": "online"}
-
-        # =========================================================================
-        # 4. GÉNÉRATION DE RÉPONSE INTELLIGENTE VIA LLM (Claude / Gemini) OU MOTEUR COGNITIF
-        # =========================================================================
+        # 5. GÉNÉRATION DE RÉPONSE INTELLIGENTE VIA LLM OU MOTEUR COGNITIF
         drivers_summary = ", ".join([f"{d.full_name} ({d.current_status.value}, {d.daily_rate_xof} FCFA/j)" for d in drivers])
         memories_text = "\n".join([f"- {m.content}" for m in learned_memories]) if learned_memories else "Aucune consigne pour le moment."
 
         system_prompt = (
             "Tu es Lockybee, l'Agent IA Gardien 3D, auditeur permanent et assistant d'administration "
-            "de la plateforme LockER au Bénin (gestion et verrouillage Kiosk de la flotte Samsung Galaxy A34 5G). "
+            "de la plateforme LockER au Bénin (gestion et verrouillage Kiosk de la flotte Android). "
             "Tu as la finesse intellectuelle, la profondeur analytique, l'élégance de style et la clarté de Claude AI (Anthropic). "
             "RÈGLE SUPRÊME : Tu fais STRICTEMENT ce que l'administrateur t'ordonne ('ne fait que ce qu'on lui dit'). "
             "Tu ne prends jamais d'initiative de blocage ou modification sans accord exprès. "
@@ -546,7 +480,6 @@ class LockybeeService:
             "Réponds en français impeccable avec des émojis pertinents, du Markdown élégant, des listes claires et un esprit stratégique."
         )
 
-        # Tentative d'appel LLM si configuré
         llm_reply = await LockybeeService._call_external_llm(system_prompt, raw_query)
         if llm_reply:
             return {
@@ -558,13 +491,13 @@ class LockybeeService:
                 "engine": "LLM_DIRECT"
             }
 
-        # Moteur cognitif contextuel avancé (Style Claude AI, sans templates rigides)
+        # Moteur cognitif
         if any(w in q_lower for w in ["statut", "status", "santé", "etat", "comment ça va", "rapport"]):
             reply = (
                 f"🐝 **Synthèse Stratégique & Opérationnelle de la Flotte LockER :**\n\n"
                 f"L'écosystème Cloud fonctionne avec une stabilité optimale. Voici l'état de vos opérations en temps réel au Bénin :\n\n"
                 f"• **Score d'Intégrité Globale :** `{score}%` (Tous protocoles nominaux)\n"
-                f"• **Flotte Déployée :** `{metrics['total_devices']}` Samsung Galaxy A34 5G sous gestion active\n"
+                f"• **Flotte Déployée :** `{metrics['total_devices']}` terminaux Android sous gestion active\n"
                 f"• **Chauffeurs à Jour :** `{metrics['active_devices']}` terminaux actifs et totalement débloqués\n"
                 f"• **Impayés Détectés (J+1 / J+2) :** `{metrics['overdue_devices']}` chauffeur(s) sous surveillance préventive\n"
                 f"• **Mode Kiosk Strict Actif :** `{metrics['locked_devices']}` terminal(aux) bloqué(s) pour impayé ≥ 3 jours\n"
@@ -606,14 +539,13 @@ class LockybeeService:
             reply = (
                 f"🛰️ **Système de Géolocalisation & Imagerie Satellite en Direct :**\n\n"
                 f"• **Technologie de Cartographie :** Vue Satellite Hybride Google Maps / Esri World Imagery avec photographies réelles des rues et bâtiments de Cotonou.\n"
-                f"• **Précision Matérielle :** Extraction directe des coordonnées GPS réelles transmises par le matériel Samsung Galaxy A34 (`GPS_PROVIDER` + `NETWORK_PROVIDER`).\n"
+                f"• **Précision Matérielle :** Extraction directe des coordonnées GPS réelles transmises par le matériel Android (`GPS_PROVIDER` + `NETWORK_PROVIDER`).\n"
                 f"• **Indicateur Visuel :** Point vert pulsant indiquant la position exacte en temps réel de chaque véhicule.\n"
                 f"• **Calcul d'Itinéraire :** Cliquez sur « *Localiser le téléphone* » sur la carte pour tracer la route dynamique et estimer le temps de trajet depuis votre QG."
             )
             suggestions = ["Voir la carte en direct", "Statut des terminaux", "Audit complet"]
 
         else:
-            # Réponse analytique personnalisée riche
             reply = (
                 f"🐝 **Analyse Cognitive Lockybee :**\n\n"
                 f"J'ai attentivement analysé votre message : « *{raw_query}* ».\n\n"

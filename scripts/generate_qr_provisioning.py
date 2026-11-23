@@ -1,5 +1,5 @@
 """
-Générateur de QR Code d'installation directe pour Samsung Galaxy A34 5G
+Générateur de QR Code d'installation directe pour smartphones Android
 Permet d'installer directement l'application LockER sans brancher de câble USB :
 Scannez simplement ce QR Code avec l'appareil photo de n'importe quel smartphone.
 """

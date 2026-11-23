@@ -28,12 +28,15 @@ class LockerFirebaseMessagingService : FirebaseMessagingService() {
         prefs.edit().putString("fcm_token", token).apply()
         
         // Synchroniser avec l'API Backend (/api/v1/devices/register)
-        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "352965710157155"
+        val savedImei = prefs.getString("assigned_imei", null)
+        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "TERMINAL_ANDROID"
+        val targetId = if (!savedImei.isNullOrBlank()) savedImei else androidId
+
         Thread {
             try {
                 val client = OkHttpClient()
                 val json = JSONObject().apply {
-                    put("imei", androidId)
+                    put("imei", targetId)
                     put("model", "${Build.MANUFACTURER} ${Build.MODEL}".trim())
                     put("fcm_token", token)
                     put("app_version", "1.0.0")

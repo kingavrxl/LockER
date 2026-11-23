@@ -19,22 +19,22 @@ class DeviceTelemetryUpdate(BaseModel):
     battery_level: Optional[int] = 100
     ip_address: Optional[str] = None
     mac_address: Optional[str] = None
-    network_operator: Optional[str] = "MTN Bénin"
+    network_operator: Optional[str] = None
     wifi_ssid: Optional[str] = None
 
 
 class DevicePairingSimulate(BaseModel):
     imei: str
-    model: Optional[str] = "Samsung Galaxy A34 5G (SM-A346B)"
-    full_name: Optional[str] = "Bio Gado (Chauffeur Cotonou)"
-    phone_number: Optional[str] = "+229 01 97 12 34 56"
-    vehicle_plate: Optional[str] = "RB-8492-Littoral"
+    model: Optional[str] = "Smartphone Android"
+    full_name: Optional[str] = "Conducteur"
+    phone_number: Optional[str] = "+229 01 00 00 00 00"
+    vehicle_plate: Optional[str] = "RB-0001-Benin"
     daily_rate_xof: Optional[int] = 5000
     latitude: Optional[float] = 6.3654
     longitude: Optional[float] = 2.4183
     ip_address: Optional[str] = "197.234.221.42"
     mac_address: Optional[str] = "38:F9:D3:5B:2A:10"
-    network_operator: Optional[str] = "MTN Bénin (5G VoLTE)"
+    network_operator: Optional[str] = "MTN Bénin"
     battery_level: Optional[int] = 95
 
 
@@ -66,7 +66,7 @@ async def resolve_target_device(
     all_devs_res = await db.execute(select(Device).order_by(Device.id.asc()))
     all_devs = all_devs_res.scalars().all()
     if all_devs:
-        # S'il y a un seul terminal enrôlé dans le parc, c'est obligatoirement le smartphone physique
+        # S'il y a un seul terminal enrôlé dans le parc, c'est obligatoirement le terminal physique
         if len(all_devs) == 1:
             dev = all_devs[0]
             if serial_number and not dev.serial_number:
@@ -89,19 +89,19 @@ async def resolve_target_device(
 async def register_device(payload: DeviceRegisterRequest, db: AsyncSession = Depends(get_db)):
     """
     Enregistre ou met à jour le token FCM, l'IMEI et toutes les télémétries matérielles
-    de l'appareil Samsung Galaxy A34. Appelé automatiquement au démarrage de l'agent Android.
+    de l'appareil Android. Appelé automatiquement au démarrage de l'agent Android.
     """
     device = await resolve_target_device(db, payload.imei, payload.android_id, payload.serial_number)
 
     now = datetime.utcnow()
     default_lease = now + timedelta(hours=settings.OFFLINE_GRACE_PERIOD_HOURS)
 
-    # Coordonnées réelles ou par défaut
-    lat = payload.latitude if payload.latitude is not None else 6.3654
-    lon = payload.longitude if payload.longitude is not None else 2.4183
-    ip = payload.ip_address or "197.234.221.14"
-    mac = payload.mac_address or "A4:B2:39:8F:12:A0"
-    net_op = payload.network_operator or "MTN Bénin"
+    # Coordonnées réelles si transmises
+    lat = payload.latitude
+    lon = payload.longitude
+    ip = payload.ip_address
+    mac = payload.mac_address
+    net_op = payload.network_operator
     battery = payload.battery_level if payload.battery_level is not None else 100
 
     if device:
@@ -114,10 +114,12 @@ async def register_device(payload: DeviceRegisterRequest, db: AsyncSession = Dep
             device.latitude = payload.latitude
         if payload.longitude is not None:
             device.longitude = payload.longitude
-        device.ip_address = ip
-        if payload.mac_address:
-            device.mac_address = payload.mac_address
-        device.network_operator = net_op
+        if ip:
+            device.ip_address = ip
+        if mac:
+            device.mac_address = mac
+        if net_op:
+            device.network_operator = net_op
         if payload.wifi_ssid:
             device.wifi_ssid = payload.wifi_ssid
         device.battery_level = battery
@@ -130,9 +132,9 @@ async def register_device(payload: DeviceRegisterRequest, db: AsyncSession = Dep
             driver_count_res = await db.execute(select(Driver))
             num = len(driver_count_res.scalars().all()) + 1
             new_driver = Driver(
-                full_name=f"Conducteur {num} ({payload.model or 'Samsung'})",
-                phone_number=f"+229 01 {payload.imei[-8:-4] if len(payload.imei)>=8 else '9712'} {payload.imei[-4:] if len(payload.imei)>=4 else '3456'}",
-                vehicle_plate=f"RB-{payload.imei[-4:] if len(payload.imei)>=4 else '7788'}-Benin",
+                full_name=f"Conducteur {num}",
+                phone_number=f"+229 01 {payload.imei[-8:-4] if len(payload.imei)>=8 else '9700'} {payload.imei[-4:] if len(payload.imei)>=4 else '0000'}",
+                vehicle_plate=f"RB-{payload.imei[-4:] if len(payload.imei)>=4 else '0000'}-Benin",
                 daily_rate_xof=settings.DAILY_PAYMENT_AMOUNT_XOF,
                 current_status=PaymentStatusEnum.UP_TO_DATE,
                 consecutive_overdue_days=0
@@ -145,9 +147,9 @@ async def register_device(payload: DeviceRegisterRequest, db: AsyncSession = Dep
         driver_count_res = await db.execute(select(Driver))
         num = len(driver_count_res.scalars().all()) + 1
         new_driver = Driver(
-            full_name=f"Conducteur {num} ({payload.model or 'Samsung'})",
-            phone_number=f"+229 01 {payload.imei[-8:-4] if len(payload.imei)>=8 else '9712'} {payload.imei[-4:] if len(payload.imei)>=4 else '3456'}",
-            vehicle_plate=f"RB-{payload.imei[-4:] if len(payload.imei)>=4 else '7788'}-Benin",
+            full_name=f"Conducteur {num}",
+            phone_number=f"+229 01 {payload.imei[-8:-4] if len(payload.imei)>=8 else '9700'} {payload.imei[-4:] if len(payload.imei)>=4 else '0000'}",
+            vehicle_plate=f"RB-{payload.imei[-4:] if len(payload.imei)>=4 else '0000'}-Benin",
             daily_rate_xof=settings.DAILY_PAYMENT_AMOUNT_XOF,
             current_status=PaymentStatusEnum.UP_TO_DATE,
             consecutive_overdue_days=0
@@ -158,8 +160,8 @@ async def register_device(payload: DeviceRegisterRequest, db: AsyncSession = Dep
         device = Device(
             driver_id=new_driver.id,
             imei=payload.imei,
-            serial_number=payload.serial_number or payload.android_id or f"R58W{payload.imei[-6:] if len(payload.imei)>=6 else '000000'}",
-            model=payload.model or "Samsung Galaxy A34 5G",
+            serial_number=payload.serial_number or payload.android_id or f"SN_{payload.imei[-6:] if len(payload.imei)>=6 else '000000'}",
+            model=payload.model or "Smartphone Android",
             fcm_token=payload.fcm_token or "",
             app_version=payload.app_version or "1.0.0",
             is_locked=False,
@@ -170,7 +172,7 @@ async def register_device(payload: DeviceRegisterRequest, db: AsyncSession = Dep
             ip_address=ip,
             mac_address=mac,
             network_operator=net_op,
-            wifi_ssid=payload.wifi_ssid or "MTN_FIBRE_HQ",
+            wifi_ssid=payload.wifi_ssid,
             battery_level=battery
         )
         db.add(device)
@@ -195,9 +197,9 @@ async def device_heartbeat(payload: DeviceHeartbeatRequest, db: AsyncSession = D
         driver_count_res = await db.execute(select(Driver))
         num = len(driver_count_res.scalars().all()) + 1
         new_driver = Driver(
-            full_name=f"Conducteur {num} (Samsung A34)",
-            phone_number=f"+229 01 {payload.imei[-8:-4] if len(payload.imei)>=8 else '9712'} {payload.imei[-4:] if len(payload.imei)>=4 else '3456'}",
-            vehicle_plate=f"RB-{payload.imei[-4:] if len(payload.imei)>=4 else '7788'}-Benin",
+            full_name=f"Conducteur {num}",
+            phone_number=f"+229 01 {payload.imei[-8:-4] if len(payload.imei)>=8 else '9700'} {payload.imei[-4:] if len(payload.imei)>=4 else '0000'}",
+            vehicle_plate=f"RB-{payload.imei[-4:] if len(payload.imei)>=4 else '0000'}-Benin",
             daily_rate_xof=settings.DAILY_PAYMENT_AMOUNT_XOF,
             current_status=PaymentStatusEnum.UP_TO_DATE,
             consecutive_overdue_days=0
@@ -208,15 +210,15 @@ async def device_heartbeat(payload: DeviceHeartbeatRequest, db: AsyncSession = D
         device = Device(
             driver_id=new_driver.id,
             imei=payload.imei,
-            serial_number=payload.serial_number or payload.android_id or f"R58W{payload.imei[-6:] if len(payload.imei)>=6 else '000000'}",
-            model="Samsung Galaxy A34 5G",
+            serial_number=payload.serial_number or payload.android_id or f"SN_{payload.imei[-6:] if len(payload.imei)>=6 else '000000'}",
+            model="Smartphone Android",
             fcm_token=payload.fcm_token or "",
             app_version="1.0.0",
             is_locked=False,
             last_heartbeat=now,
             lease_expires_at=default_lease,
-            latitude=payload.latitude if payload.latitude is not None else 6.3654,
-            longitude=payload.longitude if payload.longitude is not None else 2.4183,
+            latitude=payload.latitude,
+            longitude=payload.longitude,
             battery_level=payload.battery_level if payload.battery_level is not None else 100
         )
         db.add(device)
@@ -284,10 +286,9 @@ async def update_device_telemetry(imei: str, payload: DeviceTelemetryUpdate, db:
 @router.post("/pairing/simulate")
 async def simulate_device_pairing(payload: DevicePairingSimulate, db: AsyncSession = Depends(get_db)):
     """
-    Simulateur d'enrôlement physique pour le processus d'ajout (Wizard).
-    Permet de valider immédiatement l'Étape 1 (connexion) et l'Étape 2 (importation des adresses).
+    Enrôlement pour le processus d'ajout (Wizard).
+    Permet de valider l'Étape 1 (connexion) et l'Étape 2 (importation des adresses).
     """
-    # 1. Vérifier si l'appareil existe déjà
     res = await db.execute(select(Device).where(Device.imei == payload.imei))
     device = res.scalars().first()
 
@@ -299,9 +300,9 @@ async def simulate_device_pairing(payload: DevicePairingSimulate, db: AsyncSessi
     driver = drv_res.scalars().first()
     if not driver:
         driver = Driver(
-            full_name=payload.full_name,
+            full_name=payload.full_name or "Conducteur",
             phone_number=payload.phone_number,
-            vehicle_plate=payload.vehicle_plate,
+            vehicle_plate=payload.vehicle_plate or "RB-0001-Benin",
             daily_rate_xof=payload.daily_rate_xof or 5000,
             current_status=PaymentStatusEnum.UP_TO_DATE,
             consecutive_overdue_days=0
@@ -313,8 +314,8 @@ async def simulate_device_pairing(payload: DevicePairingSimulate, db: AsyncSessi
         device = Device(
             driver_id=driver.id,
             imei=payload.imei,
-            serial_number=f"R58W{payload.imei[-6:]}",
-            model=payload.model,
+            serial_number=f"SN_{payload.imei[-6:]}",
+            model=payload.model or "Smartphone Android",
             fcm_token=f"fcm_token_device_{payload.imei[-6:]}",
             app_version="1.2.0",
             is_locked=False,
@@ -325,7 +326,7 @@ async def simulate_device_pairing(payload: DevicePairingSimulate, db: AsyncSessi
             ip_address=payload.ip_address,
             mac_address=payload.mac_address,
             network_operator=payload.network_operator,
-            wifi_ssid="MTN_4G_COTONOU",
+            wifi_ssid=payload.wifi_ssid,
             battery_level=payload.battery_level
         )
         db.add(device)

@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">LockER Agent</string>
     <string name="device_admin_label">LockER Gestionnaire de Flotte</string>
-    <string name="device_admin_description">Gestionnaire Device Owner pour la flotte Samsung Galaxy A34 5G.</string>
+    <string name="device_admin_description">Gestionnaire Device Owner pour la flotte LockER.</string>
 </resources>

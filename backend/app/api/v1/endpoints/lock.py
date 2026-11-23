@@ -16,7 +16,7 @@ async def block_driver(
 ):
     """
     Verrouille manuellement ou automatiquement le téléphone d'un conducteur.
-    Envoie le signal FCM haute priorité et active le mode Kiosk d'impayé.
+    Envoie le signal haute priorité et active le mode Kiosk d'impayé.
     """
     success = await LockService.lock_driver_device(
         db=db,
@@ -37,7 +37,7 @@ async def unblock_driver(
 ):
     """
     Déverrouille manuellement ou suite à un paiement l'appareil du conducteur.
-    Restaure les fonctionnalités normales du Samsung A34.
+    Restaure les fonctionnalités normales du smartphone Android.
     """
     success = await LockService.unlock_driver_device(
         db=db,

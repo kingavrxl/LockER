@@ -54,7 +54,7 @@ async def list_rules(db: AsyncSession = Depends(get_db)):
     # Si aucune règle, initialiser l'échéancier journalier par défaut Bénin
     if not rules:
         default_rule = PaymentScheduleRule(
-            title="Échéancier Journalier Flotte (Samsung Galaxy A34)",
+            title="Échéancier Journalier Flotte",
             due_date_str="Tous les soirs avant 22h00",
             due_day=None,
             amount_xof=5000,

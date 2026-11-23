@@ -72,7 +72,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               </span>
             </div>
             <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Plateforme de Gestion & Verrouillage Galaxy A34 5G
+              Plateforme de Gestion &amp; Verrouillage Flotte Android
             </p>
           </div>
         </div>

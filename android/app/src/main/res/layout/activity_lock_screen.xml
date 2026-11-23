@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#070D1E"
+    android:background="@color/night_blue"
     android:fillViewport="true">
 
     <LinearLayout
@@ -10,153 +10,174 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center_horizontal"
-        android:padding="24dp">
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="24dp">
 
-        <!-- En-tête Badge Sécurité MDM -->
+        <!-- En-tête Badge Sécurité MDM (Bleu nuit & Vert) -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center"
-            android:background="#162035"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="8dp"
-            android:layout_marginTop="20dp">
+            android:background="@color/night_blue_card"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="6dp"
+            android:layout_marginTop="12dp">
 
             <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:tint="#10B981"
-                android:src="@android:drawable/ic_lock_lock" />
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:tint="@color/green_emerald"
+                android:src="@android:drawable/ic_lock_lock"
+                android:contentDescription="Security Badge" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text=" LOCKER MDM ENTERPRISE "
-                android:textColor="#10B981"
+                android:textColor="@color/green_emerald"
                 android:textSize="11sp"
                 android:textStyle="bold"
-                android:letterSpacing="0.15" />
+                android:letterSpacing="0.12" />
         </LinearLayout>
 
-        <!-- Icône de Cadenas Stylisée -->
+        <!-- Icône de Cadenas Moderne (Vert Émeraude) -->
         <ImageView
             android:id="@+id/ivLockIcon"
-            android:layout_width="88dp"
-            android:layout_height="88dp"
-            android:layout_marginTop="24dp"
-            android:tint="#EF4444"
-            android:src="@android:drawable/ic_lock_power_off" />
+            android:layout_width="76dp"
+            android:layout_height="76dp"
+            android:layout_marginTop="20dp"
+            android:tint="@color/green_emerald"
+            android:src="@android:drawable/ic_lock_lock"
+            android:contentDescription="Lock Icon" />
 
-        <!-- Titre Principal -->
+        <!-- Titre Principal (Blanc Épuré) -->
         <TextView
             android:id="@+id/tvLockTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="TERMINAL TEMPORAIREMENT BLOQUÉ"
-            android:textColor="#F8FAFC"
-            android:textSize="22sp"
+            android:layout_marginTop="14dp"
+            android:text="ACCÈS TEMPORAIREMENT SUSPENDU"
+            android:textColor="@color/white"
+            android:textSize="20sp"
             android:textStyle="bold"
             android:textAlignment="center" />
 
-        <!-- Sous-titre -->
+        <!-- Sous-titre Sober (Blanc adouci) -->
         <TextView
             android:id="@+id/tvLockSubtitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="Échéance de versement journalier en attente"
-            android:textColor="#94A3B8"
-            android:textSize="14sp"
+            android:text="En attente de régularisation de versement"
+            android:textColor="@color/white_muted"
+            android:textSize="13sp"
             android:textAlignment="center" />
 
-        <!-- Boîte de Détail / Motif -->
+        <!-- Carte Centrale d'Information (Bleu Nuit & Bordure) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="#0F1B33"
+            android:background="@color/night_blue_card"
             android:padding="16dp"
-            android:layout_marginTop="20dp">
+            android:layout_marginTop="18dp">
 
+            <!-- Tag de statut -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="MOTIF OFFICIEL"
+                android:textColor="@color/green_emerald"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08" />
+
+            <!-- Motif dynamique -->
             <TextView
                 android:id="@+id/tvLockReason"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="#F59E0B"
+                android:layout_marginTop="6dp"
+                android:textColor="@color/white"
                 android:textSize="13sp"
                 android:textStyle="bold"
-                android:text="Motif : Impayé détecté par le système central (≥ 3 jours)"
-                android:textAlignment="center" />
+                android:text="Échéance de versement dépassée" />
 
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/night_blue_border"
+                android:layout_marginVertical="10dp" />
+
+            <!-- Message explicatif respectueux et sobre -->
             <TextView
                 android:id="@+id/tvLockInstructions"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Régularisez votre compte via Mobile Money pour débloquer automatiquement ce téléphone en moins de 30 secondes."
-                android:textColor="#CBD5E1"
+                android:text="Pour réactiver l'accès complet et immédiat à votre smartphone, veuillez effectuer votre versement via Mobile Money. Votre terminal se déverrouille automatiquement dès réception."
+                android:textColor="@color/white_muted"
                 android:textSize="12sp"
-                android:lineSpacingExtra="3dp"
-                android:textAlignment="center" />
+                android:lineSpacingExtra="3dp" />
         </LinearLayout>
 
-        <!-- Bouton Principal Payer Immédiatement (Vert Émeraude) -->
+        <!-- Bouton 1 : Payer par Mobile Money (Vert Émeraude vif, texte Noir) -->
         <Button
             android:id="@+id/btnPayNow"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="28dp"
-            android:backgroundTint="#059669"
-            android:textColor="#FFFFFF"
-            android:text="💳 PAYER VIA MOBILE MONEY (5 000 FCFA)"
-            android:textSize="14sp"
+            android:layout_height="52dp"
+            android:layout_marginTop="20dp"
+            android:backgroundTint="@color/green_emerald"
+            android:textColor="@color/black"
+            android:text="💳 RÉGULARISER PAR MOBILE MONEY"
+            android:textSize="13sp"
             android:textStyle="bold" />
 
-        <!-- Bouton Actualiser l'état (après paiement) -->
+        <!-- Bouton 2 : Actualiser après paiement (Bleu Nuit avec texte Vert) -->
         <Button
             android:id="@+id/btnRefreshStatus"
             android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="10dp"
-            android:backgroundTint="#10B981"
-            android:textColor="#0B132B"
-            android:text="🔄 J'AI EFFECTUÉ LE PAIEMENT (DÉBLOQUER)"
-            android:textSize="13sp"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="@color/night_blue_card"
+            android:textColor="@color/green_emerald"
+            android:text="🔄 VÉRIFIER LE PAIEMENT (DÉBLOQUER)"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
-        <!-- Bouton Appeler le Support Flotte -->
+        <!-- Bouton 3 : Appeler le Support Flotte (Bleu Nuit, texte Blanc) -->
         <Button
             android:id="@+id/btnCallSupport"
             android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:layout_marginTop="10dp"
-            android:backgroundTint="#1E293B"
-            android:textColor="#F1F5F9"
-            android:text="📞 APPELER LE GESTIONNAIRE DE FLOTTE"
-            android:textSize="13sp" />
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="@color/night_blue_card"
+            android:textColor="@color/white"
+            android:text="📞 CONTACTER LE GESTIONNAIRE"
+            android:textSize="12sp" />
 
-        <!-- Bouton Appel d'Urgence (112 SAMU / Police) -->
+        <!-- Bouton 4 : Appel d'Urgence 112 (Sobre, conforme, fond Noir/Bleu nuit, texte Blanc) -->
         <Button
             android:id="@+id/btnEmergencyCall"
             android:layout_width="match_parent"
-            android:layout_height="46dp"
-            android:layout_marginTop="10dp"
-            android:backgroundTint="#DC2626"
-            android:textColor="#FFFFFF"
+            android:layout_height="44dp"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="@color/black"
+            android:textColor="@color/white"
             android:text="🚨 APPEL D'URGENCE (112)"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <!-- Mention Légale et Identifiant -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="LockER Bénin • Protection Conforme Code du Numérique"
-            android:textColor="#64748B"
-            android:textSize="11sp" />
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"
+            android:text="LockER Protection Flotte • Conforme Standards MDM"
+            android:textColor="@color/text_muted"
+            android:textSize="10sp"
+            android:textAlignment="center" />
 
     </LinearLayout>
 </ScrollView>

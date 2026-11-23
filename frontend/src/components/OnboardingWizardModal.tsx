@@ -43,7 +43,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
   const [pairedDevice, setPairedDevice] = useState<any>(null);
 
   // Default driver values for newly enrolled phone
-  const driverName = 'Chauffeur Enrôlé (Samsung A34)';
+  const driverName = 'Chauffeur Enrôlé';
   const phoneNumber = '+229 01 97 45 88 12';
   const vehiclePlate = 'RB-3940-Cotonou';
   const dailyRate = 5000;
@@ -98,7 +98,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imei: dummyImei,
-          model: 'Samsung Galaxy A34 5G (SM-A346B)',
+          model: 'Smartphone Android',
           full_name: driverName,
           phone_number: phoneNumber,
           vehicle_plate: vehiclePlate,
@@ -127,7 +127,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
       setPairedDevice({
         imei: dummyImei,
         serial_number: `R58W${dummyImei.slice(-6)}`,
-        model: 'Samsung Galaxy A34 5G (SM-A346B)',
+        model: 'Smartphone Android',
         ip_address: '197.234.221.42',
         mac_address: '38:F9:D3:5B:2A:10',
         network_operator: 'MTN Bénin (5G VoLTE)',
@@ -180,7 +180,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
       phoneMarker.bindPopup(`
         <div style="font-family: sans-serif; font-size: 12px; color: #0F172A; padding: 4px;">
           <b style="color: #059669;">● Point Vert Direct (GPS Actif)</b><br/>
-          <b>${pairedDevice?.model || 'Samsung Galaxy A34 5G'}</b><br/>
+          <b>${pairedDevice?.model || 'Smartphone Android'}</b><br/>
           IMEI: ${pairedDevice?.imei || 'Non renseigné'}<br/>
           Batterie: ${pairedDevice?.battery_level || 95}%<br/>
           Opérateur: ${pairedDevice?.network_operator || 'MTN Bénin'}
@@ -377,7 +377,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   Étape 1 : Scannage du QR Code & Établissement de la Connexion
                 </h3>
                 <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  Scannez le QR Code avec le Samsung Galaxy A34 pour installer l'APK LockER. La plateforme écoute en temps réel et validera dès que le premier handshake sera reçu.
+                  Scannez le QR Code avec le smartphone Android pour installer l'APK LockER. La plateforme écoute en temps réel et validera dès que le premier handshake sera reçu.
                 </p>
               </div>
 
@@ -428,7 +428,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
 
                     {isStep1Validated && (
                       <div className="pt-2 border-t border-emerald-500/30 text-xs space-y-1">
-                        <div><b>Appareil détecté :</b> {pairedDevice?.model || 'Samsung Galaxy A34 5G'}</div>
+                        <div><b>Appareil détecté :</b> {pairedDevice?.model || 'Smartphone Android'}</div>
                         <div><b>IMEI capté :</b> <span className="font-mono text-emerald-300">{pairedDevice?.imei}</span></div>
                       </div>
                     )}
@@ -441,7 +441,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                       className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-xs font-bold shadow-lg shadow-emerald-500/30 transition flex items-center justify-center gap-2"
                     >
                       <Sparkles className="w-4 h-4" />
-                      <span>Simuler la Connexion Réelle d'un Samsung A34</span>
+                      <span>Simuler la Connexion Réelle d'un Smartphone Android</span>
                     </button>
                   ) : (
                     <button
@@ -490,13 +490,13 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                       </span>
                     </div>
                     <div className="font-mono text-sm font-bold text-emerald-300">
-                      IMEI : {pairedDevice?.imei || '352965710157155'}
+                      IMEI : {pairedDevice?.imei || '-'}
                     </div>
                     <div className="text-xs text-slate-400">
                       S/N : <span className="font-mono text-slate-200">{pairedDevice?.serial_number || 'R58W80ABC12'}</span>
                     </div>
                     <div className="text-xs text-slate-400">
-                      Modèle : <span className="text-slate-200 font-medium">{pairedDevice?.model || 'Samsung Galaxy A34 5G'}</span>
+                      Modèle : <span className="text-slate-200 font-medium">{pairedDevice?.model || 'Smartphone Android'}</span>
                     </div>
                   </div>
                 </div>

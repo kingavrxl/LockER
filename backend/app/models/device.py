@@ -11,7 +11,7 @@ class Device(Base):
     driver_id = Column(Integer, ForeignKey("drivers.id"), unique=True, nullable=True)
     imei = Column(String(50), unique=True, index=True, nullable=False)
     serial_number = Column(String(100), unique=True, nullable=True)
-    model = Column(String(100), default="Samsung Galaxy A34 5G")
+    model = Column(String(100), default="Smartphone Android")
     fcm_token = Column(Text, nullable=True)
     
     # État du verrouillage
@@ -20,12 +20,12 @@ class Device(Base):
     locked_at = Column(DateTime, nullable=True)
     unlocked_at = Column(DateTime, nullable=True)
     
-    # Télémétrie & Localisation en direct (GPS Bénin)
-    latitude = Column(Float, nullable=True, default=6.3654) # Défaut Cotonou
-    longitude = Column(Float, nullable=True, default=2.4183)
+    # Télémétrie & Localisation en direct (GPS)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     ip_address = Column(String(50), nullable=True)
     mac_address = Column(String(50), nullable=True)
-    network_operator = Column(String(100), nullable=True, default="MTN Bénin")
+    network_operator = Column(String(100), nullable=True)
     wifi_ssid = Column(String(100), nullable=True)
     battery_level = Column(Integer, nullable=True, default=100)
 

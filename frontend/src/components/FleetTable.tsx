@@ -200,13 +200,13 @@ export const FleetTable: React.FC<FleetTableProps> = ({
                         <div className="space-y-0.5 font-mono">
                           <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-black/30 border border-slate-700 text-emerald-300 font-bold text-[11px]">
                             <Smartphone className="w-3 h-3 text-emerald-400" />
-                            {dev ? dev.imei : '352965710157155'}
+                            {dev ? dev.imei : '-'}
                           </div>
                           <div className="text-[10px] text-slate-400">
-                            {dev?.model || 'Samsung Galaxy A34 5G'}
+                            {dev?.model || 'Smartphone Android'}
                           </div>
                           <div className="text-[10px] text-slate-500">
-                            S/N : {dev?.serial_number || `R58W${driver.id}084`}
+                            S/N : {dev?.serial_number || '-'}
                           </div>
                         </div>
                       </td>
@@ -216,14 +216,14 @@ export const FleetTable: React.FC<FleetTableProps> = ({
                         <div className="space-y-0.5 font-mono text-[11px]">
                           <div className="text-cyan-400 flex items-center gap-1">
                             <Wifi className="w-3 h-3" />
-                            <span>IP : {dev?.ip_address || '197.234.221.42'}</span>
+                            <span>IP : {dev?.ip_address || '-'}</span>
                           </div>
                           <div className="text-slate-400 text-[10px]">
-                            MAC : {dev?.mac_address || '38:F9:D3:5B:2A:10'}
+                            MAC : {dev?.mac_address || '-'}
                           </div>
                           <div className="text-amber-400 text-[10px] font-sans flex items-center gap-1">
                             <Radio className="w-3 h-3" />
-                            <span>{dev?.network_operator || 'MTN Bénin 5G'}</span>
+                            <span>{dev?.network_operator || '-'}</span>
                           </div>
                         </div>
                       </td>
@@ -236,14 +236,14 @@ export const FleetTable: React.FC<FleetTableProps> = ({
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                             </span>
-                            <span className="text-[11px]">Point Vert Fixé</span>
+                            <span className="text-[11px]">{dev?.latitude ? 'Point Vert Fixé' : 'En attente GPS'}</span>
                           </div>
                           <div className="text-[10px] text-slate-400 font-mono">
-                            {dev?.latitude?.toFixed(4) || '6.3685'}°N, {dev?.longitude?.toFixed(4) || '2.4280'}°E
+                            {dev?.latitude ? `${dev.latitude.toFixed(4)}°N, ${dev.longitude?.toFixed(4)}°E` : '-'}
                           </div>
                           <div className="text-[10px] text-slate-300 flex items-center gap-1">
                             <Battery className="w-3 h-3 text-emerald-400" />
-                            <span>Batterie : {dev?.battery_level || 95}%</span>
+                            <span>Batterie : {dev?.battery_level != null ? `${dev.battery_level}%` : '-'}</span>
                           </div>
                         </div>
                       </td>

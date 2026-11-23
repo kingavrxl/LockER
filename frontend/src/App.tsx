@@ -274,7 +274,7 @@ export function App() {
                   SYSTÈME OPÉRATIONNEL • BÉNIN XOF
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
-                  Gestion Flotte Samsung Galaxy A34 5G
+                  Gestion Flotte Android
                 </h2>
                 <p className={`text-xs sm:text-sm max-w-xl ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                   Enrôlement guidé par QR code, synchronisation automatique des adresses, traçage GPS point vert et déblocage instantané Mobile Money.
@@ -327,7 +327,7 @@ export function App() {
                   <Smartphone className="w-4 h-4 text-emerald-400" />
                 </div>
                 <div className="text-3xl font-extrabold text-emerald-400">{totalEnrolled}</div>
-                <p className="text-xs text-slate-500 mt-1">Samsung Galaxy A34 actifs</p>
+                <p className="text-xs text-slate-500 mt-1">Terminaux Android actifs</p>
               </div>
 
               {/* À jour */}
@@ -573,7 +573,7 @@ export function App() {
         {activeSection === 'preview' && (
           <div className="space-y-6 animate-fadeIn text-center">
             <div className="max-w-lg mx-auto space-y-1">
-              <h2 className="text-xl font-bold tracking-tight">Simulateur d'Écran Kiosk Samsung Galaxy A34</h2>
+              <h2 className="text-xl font-bold tracking-tight">Simulateur d'Écran Kiosk Android</h2>
               <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 Visualisez l'interface exacte affichée sur le téléphone lorsque le verrouillage administratif ou pour impayé est actif.
               </p>
@@ -600,7 +600,7 @@ export function App() {
         apiUrl={apiUrl}
         theme={theme}
         onEnrolledSuccessfully={() => {
-          showToast("✓ Nouveau terminal Samsung Galaxy A34 enrôlé avec succès !", "success");
+          showToast("✓ Nouveau terminal Android enrôlé avec succès !", "success");
           fetchData();
         }}
       />

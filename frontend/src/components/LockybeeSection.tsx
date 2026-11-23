@@ -164,7 +164,7 @@ export const LockybeeSection: React.FC<LockybeeSectionProps> = ({ apiUrl, theme 
       const botMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'lockybee',
-        text: `🐝 Analyse en cours pour : "${text}". Tous les terminaux Galaxy A34 sont sous surveillance active. Score de sécurité à 96%.`,
+        text: `🐝 Analyse en cours pour : "${text}". Tous les terminaux Android sont sous surveillance active. Score de sécurité optimal.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         suggestions: ["Statut global", "Audit de sécurité", "Terminaux bloqués"]
       };
