@@ -14,11 +14,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  backend:
+  cloud-platform:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
-    container_name: locker_backend
+    container_name: locker_cloud_platform
     restart: always
     depends_on:
       - db
@@ -28,7 +28,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - ./backend/static:/app/static
 
 volumes:
   postgres_data:

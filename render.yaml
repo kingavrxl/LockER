@@ -1,16 +1,14 @@
 services:
   - type: web
-    name: locker-backend-api
+    name: locker-cloud-platform
     runtime: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    rootDir: .
+    buildCommand: cd frontend && npm install && npm run build && cd .. && pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: DATABASE_URL
         value: sqlite+aiosqlite:///./locker.db
-      - key: FIREBASE_CREDENTIALS_PATH
-        value: firebase-service-account.json
       - key: SUPPORT_PHONE_NUMBER
         value: "+2290191521518"

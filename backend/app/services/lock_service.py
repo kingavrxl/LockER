@@ -6,6 +6,7 @@ from app.models.driver import Driver, PaymentStatusEnum
 from app.models.device import Device
 from app.models.audit_log import AuditLog
 from app.services.fcm_service import FCMService
+from app.services.cloud_push_hub import CloudPushHub
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -44,13 +45,17 @@ class LockService:
             device.locked_at = datetime.utcnow()
             device.lease_expires_at = datetime.utcnow()  # Révocation immédiate de la validité locale
 
+            payload = {
+                "reason": reason,
+                "support_phone": settings.SUPPORT_PHONE_NUMBER,
+                "driver_name": driver.full_name,
+                "driver_phone": driver.phone_number
+            }
+            # 1. Diffusion Cloud-Native directe (WebSocket)
+            await CloudPushHub.send_command_to_device(device.imei, "LOCK", payload)
+
+            # 2. Diffusion Push FCM secondaire (si configuré)
             if device.fcm_token:
-                payload = {
-                    "reason": reason,
-                    "support_phone": settings.SUPPORT_PHONE_NUMBER,
-                    "driver_name": driver.full_name,
-                    "driver_phone": driver.phone_number
-                }
                 success_fcm = FCMService.send_device_command(
                     fcm_token=device.fcm_token,
                     action="LOCK",
@@ -102,11 +107,15 @@ class LockService:
             new_lease = datetime.utcnow() + timedelta(hours=settings.OFFLINE_GRACE_PERIOD_HOURS)
             device.lease_expires_at = new_lease
 
+            payload = {
+                "reason": reason,
+                "lease_expires_at": new_lease.isoformat()
+            }
+            # 1. Diffusion Cloud-Native directe (WebSocket)
+            await CloudPushHub.send_command_to_device(device.imei, "UNLOCK", payload)
+
+            # 2. Diffusion Push FCM secondaire (si configuré)
             if device.fcm_token:
-                payload = {
-                    "reason": reason,
-                    "lease_expires_at": new_lease.isoformat()
-                }
                 success_fcm = FCMService.send_device_command(
                     fcm_token=device.fcm_token,
                     action="UNLOCK",
@@ -123,3 +132,30 @@ class LockService:
         db.add(audit)
         await db.commit()
         return True
+
+    @staticmethod
+    async def enforce_overdue_locks(db: AsyncSession) -> list[int]:
+        """
+        Vérification automatique H24 : tout conducteur dont le retard est >= 3 jours
+        et dont l'appareil n'est pas encore bloqué est verrouillé automatiquement.
+        """
+        result = await db.execute(
+            select(Driver).where(
+                Driver.consecutive_overdue_days >= 3,
+                Driver.current_status != PaymentStatusEnum.LOCKED
+            )
+        )
+        overdue_drivers = result.scalars().all()
+        locked_ids = []
+
+        for drv in overdue_drivers:
+            success = await LockService.lock_driver_device(
+                db=db,
+                driver_id=drv.id,
+                reason=f"Verrouillage automatique pour impayé de {drv.consecutive_overdue_days} jours consécutifs",
+                performed_by="LOCKY_AUTOLOCK_CRON"
+            )
+            if success:
+                locked_ids.append(drv.id)
+
+        return locked_ids

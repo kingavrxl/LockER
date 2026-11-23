@@ -56,7 +56,45 @@ class LockerPersistentService : Service() {
         createNotificationChannel()
         startForeground(NOTIF_ID, buildForegroundNotification())
         startHeartbeatLoop()
-        Log.i(TAG, "LockerPersistentService démarré en premier plan permanent.")
+        startCloudWebSocket()
+        Log.i(TAG, "LockerPersistentService démarré en premier plan permanent (Mode Cloud Unifié).")
+    }
+
+    private fun startCloudWebSocket() {
+        serviceScope.launch {
+            try {
+                val imei = resolveImei()
+                val wsUrl = "wss://locker-2nuk.onrender.com/api/v1/devices/$imei/ws"
+                val wsRequest = Request.Builder().url(wsUrl).build()
+
+                client.newWebSocket(wsRequest, object : okhttp3.WebSocketListener() {
+                    override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
+                        try {
+                            val json = JSONObject(text)
+                            val action = json.optString("action")
+                            val reason = json.optString("reason", "Action administrative Cloud")
+                            val supportPhone = json.optString("support_phone", "+2290191521518")
+
+                            if (action == "LOCK") {
+                                Log.w(TAG, "Cloud WebSocket: Ordre LOCK direct reçu !")
+                                policyManager.lockDevice(reason, supportPhone)
+                            } else if (action == "UNLOCK") {
+                                Log.i(TAG, "Cloud WebSocket: Ordre UNLOCK direct reçu !")
+                                policyManager.unlockDevice()
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Erreur parse message Cloud: ${e.message}")
+                        }
+                    }
+
+                    override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
+                        Log.d(TAG, "Liaison WebSocket Cloud en attente de reconnexion...")
+                    }
+                })
+            } catch (e: Exception) {
+                Log.d(TAG, "Init WebSocket Cloud: ${e.message}")
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

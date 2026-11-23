@@ -17,17 +17,63 @@ export interface Device {
   id: number;
   driver_id?: number;
   imei: string;
+  serial_number?: string;
   model: string;
   is_locked: boolean;
   lock_reason?: string;
   last_heartbeat?: string;
   lease_expires_at?: string;
+  latitude?: number;
+  longitude?: number;
+  ip_address?: string;
+  mac_address?: string;
+  network_operator?: string;
+  wifi_ssid?: string;
+  battery_level?: number;
+  app_version?: string;
+  created_at?: string;
 }
 
-export interface StatsOverview {
-  total_drivers: number;
-  up_to_date: number;
-  overdue: number;
-  locked: number;
-  total_collected_today_xof: number;
+export interface SecurityAlert {
+  id: string;
+  level: 'CRITICAL' | 'WARNING' | 'INFO' | 'SECURE';
+  category: string;
+  title: string;
+  description: string;
+  timestamp: string;
+  action_recommended: string;
+  driver_id?: number;
+  driver_name?: string;
+  device_id?: number;
+  imei?: string;
+}
+
+export interface LockybeeAudit {
+  agent: string;
+  status: string;
+  security_score: number;
+  audit_timestamp: string;
+  metrics: {
+    total_drivers: number;
+    total_devices: number;
+    active_devices: number;
+    overdue_devices: number;
+    locked_devices: number;
+    offline_24h_count: number;
+    critical_offline_count: number;
+    low_battery_count: number;
+    gps_active_count: number;
+    gps_coverage_percent: number;
+    recent_payments_count: number;
+  };
+  alerts: SecurityAlert[];
+  engine: Record<string, string>;
+}
+
+export interface ChatMessage {
+  id: string;
+  sender: 'user' | 'lockybee';
+  text: string;
+  timestamp: string;
+  suggestions?: string[];
 }

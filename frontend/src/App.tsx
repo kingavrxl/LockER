@@ -2,37 +2,62 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, 
   Lock, 
-  Unlock, 
+  Unlock,
   Smartphone, 
-  Search, 
-  RefreshCw, 
-  PhoneCall, 
   AlertTriangle,
-  QrCode,
-  Trash2,
-  PlusCircle,
-  CheckCircle2,
-  X,
-  CreditCard,
-  Wifi,
-  Sliders
+  QrCode, 
+  CheckCircle2, 
+  X, 
+  CreditCard, 
+  Sliders,
+  MapPin,
+  Eye
 } from 'lucide-react';
+
 import { Driver, Device } from './types';
+import { Navigation } from './components/Navigation';
+import { OnboardingWizardModal } from './components/OnboardingWizardModal';
+import { LiveMapSection } from './components/LiveMapSection';
+import { LockybeeSection } from './components/LockybeeSection';
+import { PaymentModal } from './components/PaymentModal';
+import { LockScreenPreviewModal } from './components/LockScreenPreviewModal';
+import { FleetTable } from './components/FleetTable';
 
 export function App() {
+  // Theme state: dark (Bleu Nuit / Vert) or light (Blanc / Vert)
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('locker_theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    }
+    return 'dark';
+  });
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    localStorage.setItem('locker_theme', nextTheme);
+  };
+
+  // Section navigation state
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'fleet' | 'map' | 'lockybee' | 'payments' | 'preview'>('dashboard');
+
+  // Core Data
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [devices, setDevices] = useState<Record<number, Device>>({});
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [loadingActionId, setLoadingActionId] = useState<number | null>(null);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  
-  // Modals state
-  const [showQrModal, setShowQrModal] = useState(false);
-  const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [securityScore, setSecurityScore] = useState<number>(96);
 
-  // Dynamic API URL (LocalStorage / Render Cloud / Local)
+  // Modals state
+  const [showAddWizard, setShowAddWizard] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showLockScreenPreview, setShowLockScreenPreview] = useState(false);
+  const [showApiModal, setShowApiModal] = useState(false);
+  const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
+  const [selectedDriverForAction, setSelectedDriverForAction] = useState<Driver | null>(null);
+
+  // Dynamic API URL
   const defaultApi = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
     ? 'http://localhost:8000'
     : 'https://locker-2nuk.onrender.com';
@@ -48,11 +73,10 @@ export function App() {
   };
 
   const [apiUrl, setApiUrl] = useState(getInitialApi);
-  const [showApiModal, setShowApiModal] = useState(false);
   const [tempApiUrl, setTempApiUrl] = useState(apiUrl);
   const [isApiOnline, setIsApiOnline] = useState<boolean | null>(null);
 
-  // Form state for editing / configuring driver
+  // Edit form state
   const [editForm, setEditForm] = useState({
     full_name: '',
     phone_number: '',
@@ -61,26 +85,19 @@ export function App() {
     current_status: 'UP_TO_DATE'
   });
 
-  // Form state for manual driver creation
-  const [addForm, setAddForm] = useState({
-    full_name: '',
-    phone_number: '+229 ',
-    vehicle_plate: 'RB-',
-    daily_rate_xof: 5000
-  });
-
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotification({ message, type });
-    setTimeout(() => setNotification(null), 4500);
+    setTimeout(() => setNotification(null), 5000);
   };
 
-  // Synchronisation en temps réel avec le Backend (Local ou Cloud)
+  // Synchronisation avec le Backend
   const fetchData = async () => {
     try {
       const cleanUrl = apiUrl.replace(/\/$/, '');
-      const [driversRes, devicesRes] = await Promise.all([
+      const [driversRes, devicesRes, auditRes] = await Promise.all([
         fetch(`${cleanUrl}/api/v1/drivers`),
-        fetch(`${cleanUrl}/api/v1/devices`)
+        fetch(`${cleanUrl}/api/v1/devices`),
+        fetch(`${cleanUrl}/api/v1/lockybee/audit`).catch(() => null)
       ]);
 
       if (driversRes.ok) {
@@ -95,11 +112,18 @@ export function App() {
         const devicesData: Device[] = await devicesRes.json();
         const map: Record<number, Device> = {};
         if (Array.isArray(devicesData)) {
-          devicesData.forEach(dev => {
+          devicesData.forEach((dev) => {
             if (dev.driver_id) map[dev.driver_id] = dev;
           });
         }
         setDevices(map);
+      }
+
+      if (auditRes && auditRes.ok) {
+        const auditData = await auditRes.json();
+        if (auditData.security_score) {
+          setSecurityScore(auditData.security_score);
+        }
       }
     } catch {
       setIsApiOnline(false);
@@ -108,11 +132,11 @@ export function App() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 2500);
+    const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
   }, [apiUrl]);
 
-  // Déclencher le Verrouillage / Déverrouillage à distance via Firebase Cloud Messaging
+  // Verrouiller / Déverrouiller un conducteur
   const handleToggleLock = async (driver: Driver) => {
     setLoadingActionId(driver.id);
     const isLocked = driver.current_status === 'LOCKED';
@@ -131,21 +155,21 @@ export function App() {
         showToast(
           isLocked 
             ? `🔓 Terminal de ${driver.full_name} déverrouillé avec succès !` 
-            : `🔒 Signal de verrouillage envoyé à distance vers ${driver.full_name} !`,
+            : `🔒 Signal de verrouillage envoyé vers ${driver.full_name} !`,
           'success'
         );
         fetchData();
       } else {
-        showToast("Erreur lors de l'envoi de la commande.", 'error');
+        showToast("Erreur lors de l'envoi de l'ordre de verrouillage.", 'error');
       }
     } catch {
-      showToast("Impossible de contacter le serveur backend.", 'error');
+      showToast("Impossible de joindre le serveur.", 'error');
     } finally {
       setLoadingActionId(null);
     }
   };
 
-  // Sauvegarder les règles de paiement et informations du conducteur
+  // Enregistrer modification conducteur
   const handleSaveDriverConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDriver) return;
@@ -159,45 +183,18 @@ export function App() {
       });
 
       if (res.ok) {
-        showToast(`Règles et infos de ${editForm.full_name} enregistrées !`, 'success');
+        showToast(`Règles de ${editForm.full_name} enregistrées !`, 'success');
         setEditingDriver(null);
         fetchData();
-      } else {
-        showToast("Erreur lors de la mise à jour.", 'error');
       }
     } catch {
-      showToast("Erreur de connexion au serveur.", 'error');
-    }
-  };
-
-  // Création manuelle d'un conducteur
-  const handleCreateDriver = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanUrl = apiUrl.replace(/\/$/, '');
-    try {
-      const res = await fetch(`${cleanUrl}/api/v1/drivers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(addForm)
-      });
-
-      if (res.ok) {
-        showToast(`Conducteur ${addForm.full_name} créé avec succès !`, 'success');
-        setShowAddModal(false);
-        setAddForm({ full_name: '', phone_number: '+229 ', vehicle_plate: 'RB-', daily_rate_xof: 5000 });
-        fetchData();
-      } else {
-        const err = await res.json();
-        showToast(err.detail || "Erreur lors de la création.", 'error');
-      }
-    } catch {
-      showToast("Erreur de communication avec le serveur.", 'error');
+      showToast("Erreur lors de la sauvegarde.", 'error');
     }
   };
 
   // Supprimer un conducteur
   const handleDeleteDriver = async (driverId: number, name: string) => {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer le profil de ${name} ?`)) return;
+    if (!confirm(`Supprimer définitivement le profil de ${name} ?`)) return;
     const cleanUrl = apiUrl.replace(/\/$/, '');
 
     try {
@@ -205,49 +202,30 @@ export function App() {
         method: 'DELETE'
       });
       if (res.ok) {
-        showToast(`Conducteur ${name} supprimé.`, 'info');
+        showToast(`Fiche de ${name} supprimée.`, 'info');
         fetchData();
       }
     } catch {
-      showToast("Erreur lors de la suppression.", 'error');
+      showToast("Erreur de suppression.", 'error');
     }
   };
 
-  const openEditModal = (driver: Driver) => {
-    setEditingDriver(driver);
-    setEditForm({
-      full_name: driver.full_name,
-      phone_number: driver.phone_number,
-      vehicle_plate: driver.vehicle_plate || '',
-      daily_rate_xof: driver.daily_rate_xof,
-      current_status: driver.current_status
-    });
-  };
-
-  // Filtres
-  const filteredDrivers = drivers.filter(d => {
-    const matchesSearch = 
-      d.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      d.phone_number.includes(searchTerm) ||
-      (d.vehicle_plate && d.vehicle_plate.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (devices[d.id] && devices[d.id].imei.includes(searchTerm));
-    
-    if (statusFilter === 'ALL') return matchesSearch;
-    return matchesSearch && d.current_status === statusFilter;
-  });
-
-  // Statistiques
+  // Quick stats
   const totalEnrolled = drivers.length;
-  const activeCount = drivers.filter(d => d.current_status === 'UP_TO_DATE').length;
-  const overdueCount = drivers.filter(d => d.current_status === 'OVERDUE_1' || d.current_status === 'OVERDUE_2').length;
-  const lockedCount = drivers.filter(d => d.current_status === 'LOCKED').length;
+  const activeCount = drivers.filter((d) => d.current_status === 'UP_TO_DATE').length;
+  const overdueCount = drivers.filter((d) => d.current_status.startsWith('OVERDUE')).length;
+  const lockedCount = drivers.filter((d) => d.current_status === 'LOCKED').length;
+
+  const isDark = theme === 'dark';
 
   return (
-    <div className="min-h-screen bg-[#0A0E1A] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30">
+    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${
+      isDark ? 'bg-[#070D1E] text-slate-100' : 'bg-[#F8FAFC] text-slate-900'
+    }`}>
       
       {/* Toast Notification */}
       {notification && (
-        <div className={`fixed bottom-6 right-6 z-50 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 backdrop-blur-md border animate-bounce ${
+        <div className={`fixed bottom-6 right-6 z-50 px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 backdrop-blur-md border animate-bounce ${
           notification.type === 'success' 
             ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-200' 
             : notification.type === 'error'
@@ -257,587 +235,424 @@ export function App() {
           {notification.type === 'success' && <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />}
           {notification.type === 'error' && <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />}
           {notification.type === 'info' && <CheckCircle2 className="w-5 h-5 text-cyan-400 shrink-0" />}
-          <p className="text-sm font-medium">{notification.message}</p>
+          <p className="text-xs sm:text-sm font-semibold">{notification.message}</p>
         </div>
       )}
 
-      {/* Header Bar */}
-      <header className="sticky top-0 z-40 bg-[#0F172A]/80 backdrop-blur-xl border-b border-slate-800/80 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-              <Lock className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold tracking-tight text-white">LockER</h1>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 uppercase tracking-widest">
-                  MDM Enterprise
-                </span>
+      {/* Main Top Navigation */}
+      <Navigation
+        theme={theme}
+        toggleTheme={toggleTheme}
+        activeSection={activeSection}
+        setActiveSection={setActiveSection}
+        onOpenAddWizard={() => setShowAddWizard(true)}
+        onOpenConfigApi={() => {
+          setTempApiUrl(apiUrl);
+          setShowApiModal(true);
+        }}
+        isApiOnline={isApiOnline}
+        securityScore={securityScore}
+      />
+
+      {/* Content Container */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+        
+        {/* ================= SECTION 1: TABLEAU DE BORD (DASHBOARD) ================= */}
+        {activeSection === 'dashboard' && (
+          <div className="space-y-8 animate-fadeIn">
+            
+            {/* Hero Quick Action Banner */}
+            <div className={`p-6 sm:p-8 rounded-3xl border shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden ${
+              isDark 
+                ? 'bg-gradient-to-r from-[#0B132B] via-[#0F1B33] to-[#0A1128] border-[#1E3A5F]' 
+                : 'bg-gradient-to-r from-emerald-50 via-white to-slate-50 border-slate-200 shadow-sm'
+            }`}>
+              <div className="space-y-2 z-10 text-center sm:text-left">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                  SYSTÈME OPÉRATIONNEL • BÉNIN XOF
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
+                  Gestion Flotte Samsung Galaxy A34 5G
+                </h2>
+                <p className={`text-xs sm:text-sm max-w-xl ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                  Enrôlement guidé par QR code, synchronisation automatique des adresses, traçage GPS point vert et déblocage instantané Mobile Money.
+                </p>
               </div>
-              <p className="text-xs text-slate-400">Gestion de Flotte & Verrouillage à Distance (Samsung Galaxy A34)</p>
+
+              <div className="flex flex-wrap items-center justify-center gap-3 z-10">
+                <button
+                  onClick={() => setShowAddWizard(true)}
+                  className="px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-xs shadow-xl shadow-emerald-500/30 transition flex items-center gap-2 active:scale-95"
+                >
+                  <QrCode className="w-4 h-4" />
+                  <span>+ AJOUTER UN TÉLÉPHONE (PROCESSUS)</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveSection('map')}
+                  className={`px-4 py-3 rounded-2xl font-bold text-xs border transition flex items-center gap-2 ${
+                    isDark 
+                      ? 'bg-[#070D1E] border-slate-700 hover:bg-slate-800 text-slate-200' 
+                      : 'bg-white border-slate-300 hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <MapPin className="w-4 h-4 text-emerald-400" />
+                  <span>Carte GPS en Direct</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveSection('lockybee')}
+                  className={`px-4 py-3 rounded-2xl font-bold text-xs border transition flex items-center gap-2 ${
+                    isDark 
+                      ? 'bg-[#070D1E] border-slate-700 hover:bg-slate-800 text-amber-300' 
+                      : 'bg-white border-slate-300 hover:bg-slate-50 text-amber-600'
+                  }`}
+                >
+                  <span>🐝</span>
+                  <span>Lockybee IA</span>
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-3">
-            {/* API Connection Indicator & Config */}
-            <button 
-              onClick={() => { setTempApiUrl(apiUrl); setShowApiModal(true); }}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition ${
-                isApiOnline 
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
-                  : isApiOnline === false 
-                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20' 
-                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
-              }`}
-              title="Configurer l'adresse API du Backend (Render Cloud ou Local)"
-            >
-              <span className={`w-2 h-2 rounded-full ${isApiOnline ? 'bg-emerald-400 animate-ping' : isApiOnline === false ? 'bg-rose-500' : 'bg-amber-400'}`}></span>
-              <span>{isApiOnline ? 'Backend Connecté' : isApiOnline === false ? 'Backend Hors Ligne' : 'Connexion Backend...'}</span>
-              <Sliders className="w-3.5 h-3.5 ml-1 opacity-70" />
-            </button>
+            {/* KPI Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Terminaux Enrôlés */}
+              <div className={`p-5 rounded-2xl border shadow-lg transition ${
+                isDark ? 'bg-[#0B132B] border-[#1E3A5F]' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <div className="flex items-center justify-between text-slate-400 mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Terminaux Enrôlés</span>
+                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div className="text-3xl font-extrabold text-emerald-400">{totalEnrolled}</div>
+                <p className="text-xs text-slate-500 mt-1">Samsung Galaxy A34 actifs</p>
+              </div>
 
-            {/* Live Status indicator */}
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-              FCM Cloud
+              {/* À jour */}
+              <div className={`p-5 rounded-2xl border shadow-lg transition ${
+                isDark ? 'bg-[#0B132B] border-[#1E3A5F]' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <div className="flex items-center justify-between text-slate-400 mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Paiements à Jour</span>
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div className="text-3xl font-extrabold text-emerald-400">{activeCount}</div>
+                <p className="text-xs text-emerald-500/80 mt-1">Terminaux libres d'accès</p>
+              </div>
+
+              {/* Retard J+1/J+2 */}
+              <div className={`p-5 rounded-2xl border shadow-lg transition ${
+                isDark ? 'bg-[#0B132B] border-[#1E3A5F]' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <div className="flex items-center justify-between text-slate-400 mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Retards (J+1 / J+2)</span>
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                </div>
+                <div className="text-3xl font-extrabold text-amber-400">{overdueCount}</div>
+                <p className="text-xs text-amber-500/80 mt-1">Sous préavis de verrouillage</p>
+              </div>
+
+              {/* Verrouillés J>=3 */}
+              <div className={`p-5 rounded-2xl border shadow-lg transition ${
+                isDark ? 'bg-[#0B132B] border-[#1E3A5F]' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <div className="flex items-center justify-between text-slate-400 mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-rose-400">Bloqués Kiosk (J≥3)</span>
+                  <Lock className="w-4 h-4 text-rose-400" />
+                </div>
+                <div className="text-3xl font-extrabold text-rose-400">{lockedCount}</div>
+                <p className="text-xs text-rose-500/80 mt-1">Redirection Mobile Money active</p>
+              </div>
             </div>
 
-            {/* Quick Actions */}
-            <button 
-              onClick={() => setShowQrModal(true)}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
-            >
-              <QrCode className="w-4 h-4 text-cyan-400" />
-              <span>QR Code Enrôlement</span>
-            </button>
+            {/* Quick Fleet Table Preview in Dashboard */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-extrabold tracking-tight">
+                  Aperçu des Terminaux & Télémétrie en Direct
+                </h3>
+                <button
+                  onClick={() => setActiveSection('fleet')}
+                  className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
+                >
+                  <span>Voir tous les terminaux ({drivers.length})</span>
+                  <span>→</span>
+                </button>
+              </div>
 
-            <button 
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-lg shadow-cyan-600/30 transition"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Nouveau Conducteur</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
-
-        {/* KPI Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-b from-slate-900 to-slate-900/60 border border-slate-800/80 rounded-2xl p-5 shadow-lg">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-semibold tracking-wider uppercase text-cyan-400">Terminaux Enrôlés</span>
-              <Smartphone className="w-4 h-4 text-cyan-400" />
+              <FleetTable
+                drivers={drivers}
+                devices={devices}
+                theme={theme}
+                onToggleLock={handleToggleLock}
+                onOpenEditModal={(driver) => {
+                  setEditingDriver(driver);
+                  setEditForm({
+                    full_name: driver.full_name,
+                    phone_number: driver.phone_number,
+                    vehicle_plate: driver.vehicle_plate || '',
+                    daily_rate_xof: driver.daily_rate_xof,
+                    current_status: driver.current_status
+                  });
+                }}
+                onDeleteDriver={handleDeleteDriver}
+                onOpenPaymentModal={(driver) => {
+                  setSelectedDriverForAction(driver);
+                  setShowPaymentModal(true);
+                }}
+                onOpenLiveMapForDriver={(driver) => {
+                  setSelectedDriverForAction(driver);
+                  setActiveSection('map');
+                }}
+                onOpenLockScreenPreview={(driver) => {
+                  setSelectedDriverForAction(driver);
+                  setShowLockScreenPreview(true);
+                }}
+                loadingActionId={loadingActionId}
+                onRefreshData={fetchData}
+              />
             </div>
-            <div className="text-3xl font-extrabold text-white">{totalEnrolled}</div>
-            <p className="text-xs text-slate-500 mt-1">Appareils physiques enregistrés</p>
-          </div>
 
-          <div className="bg-gradient-to-b from-slate-900 to-slate-900/60 border border-slate-800/80 rounded-2xl p-5 shadow-lg">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-semibold tracking-wider uppercase text-emerald-400">Paiements à Jour</span>
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div className="text-3xl font-extrabold text-emerald-400">{activeCount}</div>
-            <p className="text-xs text-emerald-500/80 mt-1">Terminaux libres d'accès</p>
           </div>
+        )}
 
-          <div className="bg-gradient-to-b from-slate-900 to-slate-900/60 border border-slate-800/80 rounded-2xl p-5 shadow-lg">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-semibold tracking-wider uppercase text-amber-400">Retards (J+1 / J+2)</span>
-              <AlertTriangle className="w-4 h-4 text-amber-400" />
-            </div>
-            <div className="text-3xl font-extrabold text-amber-400">{overdueCount}</div>
-            <p className="text-xs text-amber-500/80 mt-1">Avis d'impayé préventifs</p>
-          </div>
+        {/* ================= SECTION 2: GESTION DE FLOTTE (FLEET) ================= */}
+        {activeSection === 'fleet' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold tracking-tight">Gestion de la Flotte Complète</h2>
+                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Liste exhaustive des téléphones enrôlés, contrôles de verrouillage et télémétrie réseau
+                </p>
+              </div>
 
-          <div className="bg-gradient-to-b from-slate-900 to-slate-900/60 border border-slate-800/80 rounded-2xl p-5 shadow-lg">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-semibold tracking-wider uppercase text-rose-400">Verrouillés (J≥3)</span>
-              <Lock className="w-4 h-4 text-rose-400" />
-            </div>
-            <div className="text-3xl font-extrabold text-rose-400">{lockedCount}</div>
-            <p className="text-xs text-rose-500/80 mt-1">Mode Kiosk strict actif</p>
-          </div>
-        </div>
-
-        {/* Toolbar & Filters */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-slate-900/80 p-4 rounded-2xl border border-slate-800 shadow-md">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input 
-              type="text" 
-              placeholder="Rechercher par nom, IMEI, téléphone, plaque..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-            <button 
-              onClick={() => setStatusFilter('ALL')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                statusFilter === 'ALL' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Tous ({drivers.length})
-            </button>
-            <button 
-              onClick={() => setStatusFilter('UP_TO_DATE')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                statusFilter === 'UP_TO_DATE' ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              À jour ({activeCount})
-            </button>
-            <button 
-              onClick={() => setStatusFilter('LOCKED')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                statusFilter === 'LOCKED' ? 'bg-rose-600/20 text-rose-400 border border-rose-500/30' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Bloqués ({lockedCount})
-            </button>
-            <button 
-              onClick={fetchData}
-              title="Rafraîchir"
-              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Dynamic Fleet List / Table */}
-        {filteredDrivers.length === 0 ? (
-          <div className="bg-slate-900/40 border border-dashed border-slate-800 rounded-3xl p-12 text-center flex flex-col items-center justify-center space-y-4">
-            <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center animate-pulse">
-              <Wifi className="w-8 h-8 text-cyan-400" />
-            </div>
-            <div className="max-w-md space-y-1">
-              <h3 className="text-lg font-bold text-white">En attente de connexion du premier terminal</h3>
-              <p className="text-xs text-slate-400">
-                Aucun téléphone pré-enregistré. Dès que vous installez LockER sur un Samsung Galaxy A34, son IMEI est automatiquement détecté et sa ligne apparaîtra ici en direct !
-              </p>
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button 
-                onClick={() => setShowQrModal(true)}
-                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-cyan-600/20 transition flex items-center gap-2"
+              <button
+                onClick={() => setShowAddWizard(true)}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition flex items-center gap-2"
               >
                 <QrCode className="w-4 h-4" />
-                Afficher le QR Code d'Enrôlement
+                <span>+ Ajouter un Téléphone</span>
               </button>
             </div>
+
+            <FleetTable
+              drivers={drivers}
+              devices={devices}
+              theme={theme}
+              onToggleLock={handleToggleLock}
+              onOpenEditModal={(driver) => {
+                setEditingDriver(driver);
+                setEditForm({
+                  full_name: driver.full_name,
+                  phone_number: driver.phone_number,
+                  vehicle_plate: driver.vehicle_plate || '',
+                  daily_rate_xof: driver.daily_rate_xof,
+                  current_status: driver.current_status
+                });
+              }}
+              onDeleteDriver={handleDeleteDriver}
+              onOpenPaymentModal={(driver) => {
+                setSelectedDriverForAction(driver);
+                setShowPaymentModal(true);
+              }}
+              onOpenLiveMapForDriver={(driver) => {
+                setSelectedDriverForAction(driver);
+                setActiveSection('map');
+              }}
+              onOpenLockScreenPreview={(driver) => {
+                setSelectedDriverForAction(driver);
+                setShowLockScreenPreview(true);
+              }}
+              loadingActionId={loadingActionId}
+              onRefreshData={fetchData}
+            />
           </div>
-        ) : (
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-[#0D1322] text-slate-400 border-b border-slate-800/80 font-semibold text-xs uppercase tracking-wider">
-                  <tr>
-                    <th className="py-4 px-5">Conducteur / Appareil</th>
-                    <th className="py-4 px-5">Identifiant Matériel (IMEI)</th>
-                    <th className="py-4 px-5">Règle de Paiement</th>
-                    <th className="py-4 px-5">Statut Actuel</th>
-                    <th className="py-4 px-5 text-right">Actions Administrateur</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {filteredDrivers.map((driver) => {
-                    const isLocked = driver.current_status === 'LOCKED';
-                    const dev = devices[driver.id];
+        )}
 
-                    return (
-                      <tr key={driver.id} className="hover:bg-slate-800/30 transition-colors group">
-                        
-                        {/* Conducteur */}
-                        <td className="py-4 px-5">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-white text-xs">
-                              {driver.full_name.charAt(0)}
-                            </div>
-                            <div>
-                              <div className="font-semibold text-white group-hover:text-cyan-400 transition">
-                                {driver.full_name}
-                              </div>
-                              <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-                                <PhoneCall className="w-3 h-3 text-slate-500" />
-                                {driver.phone_number}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
+        {/* ================= SECTION 3: CARTOGRAPHIE GPS (MAP) ================= */}
+        {activeSection === 'map' && (
+          <LiveMapSection
+            devices={devices}
+            drivers={drivers}
+            theme={theme}
+            onSelectDriverForAction={(driver) => {
+              setSelectedDriverForAction(driver);
+            }}
+          />
+        )}
 
-                        {/* IMEI & Véhicule */}
-                        <td className="py-4 px-5">
-                          <div className="space-y-1">
-                            <div className="inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-md bg-slate-950 border border-slate-800 text-cyan-400 font-semibold">
-                              <Smartphone className="w-3 h-3 text-cyan-400" />
-                              {dev ? dev.imei : "En attente de synchronisation"}
-                            </div>
-                            <div className="text-[11px] text-slate-400">
-                              Véhicule : <span className="text-slate-200 font-medium">{driver.vehicle_plate || 'Non renseigné'}</span>
-                            </div>
-                          </div>
-                        </td>
+        {/* ================= SECTION 4: LOCKYBEE AI GUARDIAN ================= */}
+        {activeSection === 'lockybee' && (
+          <LockybeeSection apiUrl={apiUrl} theme={theme} />
+        )}
 
-                        {/* Règle de Paiement */}
-                        <td className="py-4 px-5">
-                          <div className="space-y-0.5">
-                            <div className="font-bold text-slate-200 flex items-center gap-1">
-                              <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
-                              {driver.daily_rate_xof.toLocaleString()} FCFA
-                              <span className="text-xs font-normal text-slate-500">/ jour</span>
-                            </div>
-                            <div className="text-xs text-slate-400">
-                              {driver.consecutive_overdue_days === 0 ? (
-                                <span className="text-emerald-400 font-medium">À jour</span>
-                              ) : (
-                                <span className="text-amber-400 font-medium">{driver.consecutive_overdue_days} jour(s) impayé</span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
+        {/* ================= SECTION 5: PAIEMENTS & WEBHOOKS ================= */}
+        {activeSection === 'payments' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold tracking-tight">Passerelle de Paiements & Déblocage Automatique</h2>
+                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Reconciliation instantanée des versements MTN MoMo, Moov Money et Stripe avec levée immédiate du verrou Kiosk
+                </p>
+              </div>
 
-                        {/* Statut Badge */}
-                        <td className="py-4 px-5">
-                          {driver.current_status === 'UP_TO_DATE' && (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                              <ShieldCheck className="w-3.5 h-3.5" /> Normal (En règle)
-                            </span>
-                          )}
-                          {driver.current_status === 'OVERDUE_1' && (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                              <AlertTriangle className="w-3.5 h-3.5" /> Retard 1j
-                            </span>
-                          )}
-                          {driver.current_status === 'OVERDUE_2' && (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/30">
-                              <AlertTriangle className="w-3.5 h-3.5" /> Retard 2j (Pré-blocage)
-                            </span>
-                          )}
-                          {driver.current_status === 'LOCKED' && (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse">
-                              <Lock className="w-3.5 h-3.5" /> Bloqué (Kiosk)
-                            </span>
-                          )}
-                        </td>
+              <button
+                onClick={() => setShowPaymentModal(true)}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition flex items-center gap-2"
+              >
+                <CreditCard className="w-4 h-4" />
+                <span>Simuler un Paiement Immédiat</span>
+              </button>
+            </div>
 
-                        {/* Actions */}
-                        <td className="py-4 px-5 text-right space-x-2">
-                          {/* Bouton Configurer Règle */}
-                          <button
-                            onClick={() => openEditModal(driver)}
-                            title="Configurer règles et infos"
-                            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition inline-flex items-center"
-                          >
-                            <Sliders className="w-4 h-4" />
-                          </button>
+            {/* Quick Payment Banner & Explanations */}
+            <div className={`p-6 rounded-3xl border space-y-4 ${
+              isDark ? 'bg-[#0B132B] border-[#1E3A5F]' : 'bg-white border-slate-200 shadow-sm'
+            }`}>
+              <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-wider">
+                Fonctionnement du Déblocage / Verrouillage Automatique :
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className={`p-4 rounded-2xl border space-y-2 ${isDark ? 'bg-[#070D1E] border-[#1E2E56]' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="font-bold text-emerald-400 flex items-center gap-1.5">
+                    <Unlock className="w-4 h-4" />
+                    <span>Déblocage Automatique au Paiement</span>
+                  </div>
+                  <p className="text-slate-400 leading-relaxed">
+                    Dès qu'une transaction MTN MoMo (*133#), Moov (*880#) ou Stripe est reçue par le webhook backend, le statut du chauffeur repasse instantanément à <b>UP_TO_DATE</b>, le bail local est prolongé de 72h et l'ordre FCM <b>UNLOCK</b> est diffusé.
+                  </p>
+                </div>
 
-                          {/* Bouton Verrouiller / Déverrouiller */}
-                          <button
-                            onClick={() => handleToggleLock(driver)}
-                            disabled={loadingActionId === driver.id}
-                            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-lg ${
-                              isLocked
-                                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30'
-                                : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/30'
-                            }`}
-                          >
-                            {loadingActionId === driver.id ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            ) : isLocked ? (
-                              <>
-                                <Unlock className="w-3.5 h-3.5" />
-                                <span>Déverrouiller</span>
-                              </>
-                            ) : (
-                              <>
-                                <Lock className="w-3.5 h-3.5" />
-                                <span>Verrouiller</span>
-                              </>
-                            )}
-                          </button>
+                <div className={`p-4 rounded-2xl border space-y-2 ${isDark ? 'bg-[#070D1E] border-[#1E2E56]' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="font-bold text-rose-400 flex items-center gap-1.5">
+                    <Lock className="w-4 h-4" />
+                    <span>Verrouillage Automatique pour Impayé (J≥3)</span>
+                  </div>
+                  <p className="text-slate-400 leading-relaxed">
+                    Le service d'audit de Lockybee vérifie en continu l'échéancier. Tout chauffeur totalisant 3 jours ou plus de retard est automatiquement basculé en statut <b>LOCKED</b> et son écran est verrouillé en mode Kiosk avec redirection vers le paiement.
+                  </p>
+                </div>
+              </div>
+            </div>
 
-                          {/* Bouton Supprimer */}
-                          <button
-                            onClick={() => handleDeleteDriver(driver.id, driver.full_name)}
-                            title="Supprimer la fiche"
-                            className="p-2 rounded-xl bg-slate-900 hover:bg-rose-950/60 text-slate-500 hover:text-rose-400 border border-slate-800 transition inline-flex items-center"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
+            <FleetTable
+              drivers={drivers}
+              devices={devices}
+              theme={theme}
+              onToggleLock={handleToggleLock}
+              onOpenEditModal={(driver) => setEditingDriver(driver)}
+              onDeleteDriver={handleDeleteDriver}
+              onOpenPaymentModal={(driver) => {
+                setSelectedDriverForAction(driver);
+                setShowPaymentModal(true);
+              }}
+              onOpenLiveMapForDriver={(driver) => {
+                setSelectedDriverForAction(driver);
+                setActiveSection('map');
+              }}
+              onOpenLockScreenPreview={(driver) => {
+                setSelectedDriverForAction(driver);
+                setShowLockScreenPreview(true);
+              }}
+              loadingActionId={loadingActionId}
+              onRefreshData={fetchData}
+            />
+          </div>
+        )}
 
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+        {/* ================= SECTION 6: KIOSK SIMULATOR (PREVIEW) ================= */}
+        {activeSection === 'preview' && (
+          <div className="space-y-6 animate-fadeIn text-center">
+            <div className="max-w-lg mx-auto space-y-1">
+              <h2 className="text-xl font-bold tracking-tight">Simulateur d'Écran Kiosk Samsung Galaxy A34</h2>
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Visualisez l'interface exacte affichée sur le téléphone lorsque le verrouillage administratif ou pour impayé est actif.
+              </p>
+            </div>
+
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={() => setShowLockScreenPreview(true)}
+                className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-xl shadow-emerald-600/30 transition flex items-center gap-2 active:scale-95"
+              >
+                <Eye className="w-4 h-4" />
+                <span>Ouvrir l'Aperçu Téléphone Kiosk Interactif</span>
+              </button>
             </div>
           </div>
         )}
 
       </main>
 
-      {/* Modal : Configurer le Conducteur & la Règle de Paiement */}
-      {editingDriver && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl animate-scale-up">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <Sliders className="w-5 h-5 text-cyan-400" />
-                <h3 className="text-lg font-bold text-white">Configurer le Terminal & les Règles</h3>
-              </div>
-              <button onClick={() => setEditingDriver(null)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* ================= MODAL: PROCESSUS D'AJOUT TÉLÉPHONE (WIZARD) ================= */}
+      <OnboardingWizardModal
+        isOpen={showAddWizard}
+        onClose={() => setShowAddWizard(false)}
+        apiUrl={apiUrl}
+        theme={theme}
+        onEnrolledSuccessfully={() => {
+          showToast("✓ Nouveau terminal Samsung Galaxy A34 enrôlé avec succès !", "success");
+          fetchData();
+        }}
+      />
 
-            <form onSubmit={handleSaveDriverConfig} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1.5">Nom du Conducteur</label>
-                <input 
-                  type="text" 
-                  value={editForm.full_name}
-                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
-                  required
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500"
-                />
-              </div>
+      {/* ================= MODAL: PAIEMENT MOBILE MONEY / STRIPE ================= */}
+      <PaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        drivers={drivers}
+        selectedDriver={selectedDriverForAction}
+        apiUrl={apiUrl}
+        theme={theme}
+        onSuccess={(msg) => {
+          showToast(msg, 'success');
+          fetchData();
+        }}
+      />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1.5">Téléphone Bénin</label>
-                  <input 
-                    type="text" 
-                    value={editForm.phone_number}
-                    onChange={(e) => setEditForm({ ...editForm, phone_number: e.target.value })}
-                    required
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1.5">Plaque d'Immatriculation</label>
-                  <input 
-                    type="text" 
-                    value={editForm.vehicle_plate}
-                    onChange={(e) => setEditForm({ ...editForm, vehicle_plate: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-              </div>
+      {/* ================= MODAL: PRÉVISUALISATION LOCK SCREEN KIOSK ================= */}
+      <LockScreenPreviewModal
+        isOpen={showLockScreenPreview}
+        onClose={() => setShowLockScreenPreview(false)}
+        driver={selectedDriverForAction || drivers[0]}
+        device={selectedDriverForAction ? devices[selectedDriverForAction.id] : undefined}
+        onSimulateUnlock={() => {
+          showToast("Paiement validé ! Déverrouillage ordonné par le serveur.", "success");
+          setShowLockScreenPreview(false);
+          fetchData();
+        }}
+      />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1.5">Forfait Journalier (FCFA)</label>
-                  <input 
-                    type="number" 
-                    value={editForm.daily_rate_xof}
-                    onChange={(e) => setEditForm({ ...editForm, daily_rate_xof: parseInt(e.target.value) || 0 })}
-                    required
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1.5">Statut Administratif</label>
-                  <select 
-                    value={editForm.current_status}
-                    onChange={(e) => setEditForm({ ...editForm, current_status: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500 font-medium"
-                  >
-                    <option value="UP_TO_DATE">À jour (En règle)</option>
-                    <option value="OVERDUE_1">Retard J+1</option>
-                    <option value="OVERDUE_2">Retard J+2</option>
-                    <option value="LOCKED">Bloqué (Kiosk)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-3 flex justify-end gap-3 border-t border-slate-800">
-                <button 
-                  type="button" 
-                  onClick={() => setEditingDriver(null)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 transition"
-                >
-                  Annuler
-                </button>
-                <button 
-                  type="submit" 
-                  className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-lg shadow-cyan-600/30 transition"
-                >
-                  Enregistrer les Règles
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal : Ajouter Manuellement un Conducteur */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <PlusCircle className="w-5 h-5 text-cyan-400" />
-                <h3 className="text-lg font-bold text-white">Nouveau Conducteur</h3>
-              </div>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateDriver} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Nom Complet</label>
-                <input 
-                  type="text" 
-                  placeholder="Ex: Bio Gado"
-                  value={addForm.full_name}
-                  onChange={(e) => setAddForm({ ...addForm, full_name: e.target.value })}
-                  required
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Numéro Mobile (Bénin)</label>
-                <input 
-                  type="text" 
-                  placeholder="+229 01 97 00 00"
-                  value={addForm.phone_number}
-                  onChange={(e) => setAddForm({ ...addForm, phone_number: e.target.value })}
-                  required
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Plaque Véhicule</label>
-                  <input 
-                    type="text" 
-                    placeholder="RB-1234-Parakou"
-                    value={addForm.vehicle_plate}
-                    onChange={(e) => setAddForm({ ...addForm, vehicle_plate: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Versement (FCFA/j)</label>
-                  <input 
-                    type="number" 
-                    value={addForm.daily_rate_xof}
-                    onChange={(e) => setAddForm({ ...addForm, daily_rate_xof: parseInt(e.target.value) || 0 })}
-                    required
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500 font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 flex justify-end gap-3 border-t border-slate-800">
-                <button 
-                  type="button" 
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 transition"
-                >
-                  Annuler
-                </button>
-                <button 
-                  type="submit" 
-                  className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-lg shadow-cyan-600/30 transition"
-                >
-                  Créer le profil
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal : QR Code d'Enrôlement */}
-      {showQrModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl animate-scale-up">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white">QR Code d'Installation Rapide</h3>
-              <button onClick={() => setShowQrModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-3 bg-white rounded-2xl inline-block shadow-inner">
-              <img 
-                src={`/enrollment_qr.png?v=${Date.now()}`} 
-                alt="QR Code Téléchargement APK LockER" 
-                className="w-56 h-56 object-contain"
-              />
-            </div>
-
-            <div className="text-xs text-slate-300 text-left bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
-              <p className="font-semibold text-cyan-400">📱 Installation sans câble :</p>
-              <p className="text-slate-400">
-                1. Scannez ce QR Code avec l'appareil photo du téléphone.<br/>
-                2. Cliquez sur le lien pour lancer le téléchargement de l'APK.<br/>
-                3. Ouvrez le fichier téléchargé et installez l'application.
-              </p>
-              <div className="pt-1">
-                <a 
-                  href="https://locker-2nuk.onrender.com/download/app-release.apk" 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="text-[11px] text-cyan-400 underline hover:text-cyan-300 break-all"
-                >
-                  Lien direct : locker-2nuk.onrender.com/download/app-release.apk
-                </a>
-              </div>
-            </div>
-
-            <button 
-              onClick={() => setShowQrModal(false)}
-              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition"
-            >
-              Fermer
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Modal : Configuration API Backend */}
+      {/* ================= MODAL: PARAMÈTRES SERVEUR API ================= */}
       {showApiModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-scale-up">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+          <div className={`max-w-md w-full rounded-3xl border p-6 space-y-4 shadow-2xl animate-scale-up ${
+            isDark ? 'bg-[#0B132B] border-[#1E3A5F] text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+          }`}>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-700/50">
               <div className="flex items-center gap-2">
-                <Sliders className="w-5 h-5 text-cyan-400" />
-                <h3 className="text-base font-bold text-white">Paramètres Serveur API</h3>
+                <Sliders className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-base font-bold">Paramètres Serveur API</h3>
               </div>
               <button onClick={() => setShowApiModal(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Définissez l'URL de votre serveur Backend FastAPI hébergé sur Render ou en local. L'état de connexion s'actualise instantanément.
-            </p>
-
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-300 mb-1 block">URL du Backend (FastAPI)</label>
+                <label className="text-xs font-semibold text-slate-400 mb-1 block">URL du Backend FastAPI</label>
                 <input 
                   type="url" 
                   value={tempApiUrl} 
                   onChange={(e) => setTempApiUrl(e.target.value)}
                   placeholder="https://locker-2nuk.onrender.com"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500"
+                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none focus:border-emerald-500 ${
+                    isDark ? 'bg-[#070D1E] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-800'
+                  }`}
                 />
               </div>
 
@@ -845,9 +660,9 @@ export function App() {
                 <button
                   type="button"
                   onClick={() => setTempApiUrl('https://locker-2nuk.onrender.com')}
-                  className="px-2.5 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded-lg border border-slate-700"
+                  className="px-2.5 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-lg border border-slate-700"
                 >
-                  Défaut Render
+                  Défaut Render Cloud
                 </button>
                 <button
                   type="button"
@@ -859,7 +674,7 @@ export function App() {
               </div>
             </div>
 
-            <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-800">
+            <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-700/50">
               <button 
                 type="button" 
                 onClick={() => setShowApiModal(false)}
@@ -877,7 +692,7 @@ export function App() {
                   showToast(`URL API mise à jour : ${cleaned}`, 'info');
                   setTimeout(fetchData, 300);
                 }}
-                className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-cyan-600/30 transition"
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/30 transition"
               >
                 Appliquer
               </button>
@@ -886,7 +701,111 @@ export function App() {
         </div>
       )}
 
+      {/* ================= MODAL: MODIFIER CONDUCTEUR ================= */}
+      {editingDriver && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+          <div className={`max-w-lg w-full rounded-3xl border p-6 space-y-5 shadow-2xl animate-scale-up ${
+            isDark ? 'bg-[#0B132B] border-[#1E3A5F] text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+          }`}>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-700/50">
+              <h3 className="text-base font-bold">Modifier les Informations & Règles</h3>
+              <button onClick={() => setEditingDriver(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDriverConfig} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-400 uppercase mb-1">Nom Complet</label>
+                <input 
+                  type="text" 
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                  required
+                  className={`w-full p-2.5 rounded-xl border font-medium ${
+                    isDark ? 'bg-[#070D1E] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-800'
+                  }`}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-400 uppercase mb-1">Téléphone Bénin</label>
+                  <input 
+                    type="text" 
+                    value={editForm.phone_number}
+                    onChange={(e) => setEditForm({ ...editForm, phone_number: e.target.value })}
+                    required
+                    className={`w-full p-2.5 rounded-xl border font-medium ${
+                      isDark ? 'bg-[#070D1E] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-800'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-400 uppercase mb-1">Plaque Véhicule</label>
+                  <input 
+                    type="text" 
+                    value={editForm.vehicle_plate}
+                    onChange={(e) => setEditForm({ ...editForm, vehicle_plate: e.target.value })}
+                    className={`w-full p-2.5 rounded-xl border font-medium ${
+                      isDark ? 'bg-[#070D1E] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-800'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-400 uppercase mb-1">Forfait (FCFA/j)</label>
+                  <input 
+                    type="number" 
+                    value={editForm.daily_rate_xof}
+                    onChange={(e) => setEditForm({ ...editForm, daily_rate_xof: parseInt(e.target.value) || 0 })}
+                    required
+                    className={`w-full p-2.5 rounded-xl border font-bold ${
+                      isDark ? 'bg-[#070D1E] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-800'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-400 uppercase mb-1">Statut Administratif</label>
+                  <select 
+                    value={editForm.current_status}
+                    onChange={(e) => setEditForm({ ...editForm, current_status: e.target.value })}
+                    className={`w-full p-2.5 rounded-xl border font-medium ${
+                      isDark ? 'bg-[#070D1E] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-800'
+                    }`}
+                  >
+                    <option value="UP_TO_DATE">À jour (En règle)</option>
+                    <option value="OVERDUE_1">Retard J+1</option>
+                    <option value="OVERDUE_2">Retard J+2</option>
+                    <option value="LOCKED">Bloqué (Kiosk)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-3 flex justify-end gap-3 border-t border-slate-700/50">
+                <button 
+                  type="button" 
+                  onClick={() => setEditingDriver(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold"
+                >
+                  Annuler
+                </button>
+                <button 
+                  type="submit" 
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-600/30"
+                >
+                  Sauvegarder
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
+
 export default App;

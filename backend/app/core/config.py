@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     # Base de données PostgreSQL
     DATABASE_URL: str = "postgresql+asyncpg://locker_user:locker_pass@localhost:5432/locker_db"
     
-    # Firebase
-    FIREBASE_CREDENTIALS_PATH: Optional[str] = "firebase-service-account.json"
+    # Mode Cloud Direct (Firebase optionnel)
+    FIREBASE_CREDENTIALS_PATH: Optional[str] = None
     
     # Sécurité & Support
     SUPPORT_PHONE_NUMBER: str = "+2290191521518"  # Support Flotte Bénin (+229 01 91 52 15 18)
