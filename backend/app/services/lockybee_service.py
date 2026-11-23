@@ -300,10 +300,6 @@ class LockybeeService:
         ]
 
         if any(trig in q_lower for trig in rule_triggers):
-            # Extraction du montant (FCFA)
-            amount_match = re.search(r'(\d+[\s\d]*)\s*(?:fcfa|f|xof)?', q_lower)
-            extracted_amount = int(amount_match.group(1).replace(" ", "")) if amount_match else settings.DAILY_PAYMENT_AMOUNT_XOF
-
             # Extraction de la date (JJ/MM/AAAA ou Jour/Mois)
             date_match = re.search(r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})', raw_query)
             day_match = re.search(r'(?:le|chaque)\s+(\d{1,2})(?:er)?\s+(?:du|de chaque)\s+mois', q_lower)
@@ -318,6 +314,17 @@ class LockybeeService:
                 due_date_str = "Hebdomadaire (Tous les lundis matin)"
             else:
                 due_date_str = "Échéance personnalisée"
+
+            # Extraction du montant (FCFA) sans confusion avec la date
+            query_without_date = re.sub(r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}', '', q_lower)
+            amount_match_unit = re.search(r'(\d+[\s\d]*)\s*(?:fcfa|f|xof)\b', query_without_date)
+            amount_match_any = re.search(r'(?:de|montant|somme)\s*(\d+[\s\d]*)', query_without_date)
+            if amount_match_unit:
+                extracted_amount = int(amount_match_unit.group(1).replace(" ", ""))
+            elif amount_match_any:
+                extracted_amount = int(amount_match_any.group(1).replace(" ", ""))
+            else:
+                extracted_amount = settings.DAILY_PAYMENT_AMOUNT_XOF
 
             # Extraction de la méthode de paiement (Comment payer)
             if "mtn" in q_lower and "moov" in q_lower:
