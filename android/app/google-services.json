@@ -1,29 +1,3 @@
 {
-  "project_info": {
-    "project_number": "584568949139",
-    "project_id": "locker-6418b",
-    "storage_bucket": "locker-6418b.firebasestorage.app"
-  },
-  "client": [
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:584568949139:android:09cc7eddf5afb14c200066",
-        "android_client_info": {
-          "package_name": "com.locker.agent"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyBDfN8PQgsKKVeXCMbVUcSkU5Z7u_pbi1M"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    }
-  ],
-  "configuration_version": "1"
+  "warning": "Firebase has been permanently removed from LockER. This file is obsolete."
 }

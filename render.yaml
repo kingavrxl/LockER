@@ -1,3 +1,9 @@
+databases:
+  - name: locker-postgres
+    plan: standard
+    databaseName: locker_db
+    user: locker_user
+
 services:
   - type: web
     name: locker-cloud-platform
@@ -9,6 +15,14 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: DATABASE_URL
-        value: sqlite+aiosqlite:///./locker.db
+        fromDatabase:
+          name: locker-postgres
+          property: connectionString
       - key: SUPPORT_PHONE_NUMBER
         value: "+2290191521518"
+      - key: ADMIN_SECRET_KEY
+        value: "locker_admin_prod_secret_2026_xof"
+      - key: DEVICE_ENROLLMENT_SECRET
+        value: "locker_device_enrollment_key_xof"
+      - key: ENVIRONMENT
+        value: "production"

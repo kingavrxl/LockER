@@ -33,7 +33,7 @@ class LockybeeService:
         """
         Audit en bonne et due forme de l'intégrité de la plateforme LockER.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         offline_threshold_24h = now - timedelta(hours=24)
         offline_threshold_72h = now - timedelta(hours=72)
 
@@ -487,7 +487,7 @@ class LockybeeService:
                 "suggestions": ["Statut de la flotte", "Fais un audit de sécurité", "Qu'as-tu appris ?"],
                 "security_score": score,
                 "status": "online",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "engine": "LLM_DIRECT"
             }
 
@@ -561,6 +561,6 @@ class LockybeeService:
             "suggestions": suggestions,
             "security_score": score,
             "status": "online",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "engine": "COGNITIVE_REASONING"
         }

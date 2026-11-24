@@ -1,7 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
 class AuditLog(Base):
@@ -14,7 +18,7 @@ class AuditLog(Base):
     performed_by = Column(String(100), default="SYSTEM")  # SYSTEM, ADMIN, WEBHOOK, DRIVER
     details = Column(Text, nullable=True)
     ip_address = Column(String(50), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     # Relations
     driver = relationship("Driver", back_populates="audit_logs")

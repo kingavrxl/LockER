@@ -1,15 +1,14 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.driver import Driver, PaymentStatusEnum
 from app.models.device import Device
 from app.models.audit_log import AuditLog
-from app.services.fcm_service import FCMService
 from app.services.cloud_push_hub import CloudPushHub
 from app.core.config import settings
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("LockService")
 
 
 class LockService:
@@ -22,9 +21,10 @@ class LockService:
     ) -> bool:
         """
         Verrouille l'appareil du conducteur :
-        1. Marque le statut en base
-        2. Envoie la commande FCM haute priorité à l'agent Android
-        3. Enregistre une trace d'audit conforme
+        1. Marque le statut en base (LOCKED)
+        2. Révocation immédiate de la validité locale
+        3. Envoie la commande Cloud Directe (sub-50ms via WebSocket)
+        4. Enregistre une trace d'audit conforme
         """
         result = await db.execute(select(Driver).where(Driver.id == driver_id))
         driver = result.scalars().first()
@@ -35,15 +35,15 @@ class LockService:
         device_res = await db.execute(select(Device).where(Device.driver_id == driver_id))
         device = device_res.scalars().first()
 
-        # Mise à jour de l'état du conducteur et de l'appareil
         driver.current_status = PaymentStatusEnum.LOCKED
-        success_fcm = False
+        now = datetime.now(timezone.utc)
+        push_sent = False
 
         if device:
             device.is_locked = True
             device.lock_reason = reason
-            device.locked_at = datetime.utcnow()
-            device.lease_expires_at = datetime.utcnow()  # Révocation immédiate de la validité locale
+            device.locked_at = now
+            device.lease_expires_at = now  # Révocation immédiate du bail hors-ligne local
 
             payload = {
                 "reason": reason,
@@ -51,24 +51,15 @@ class LockService:
                 "driver_name": driver.full_name,
                 "driver_phone": driver.phone_number
             }
-            # 1. Diffusion Cloud-Native directe (WebSocket)
-            await CloudPushHub.send_command_to_device(device.imei, "LOCK", payload)
+            # Diffusion Cloud-Native directe (100% Hors Firebase)
+            push_sent = await CloudPushHub.send_command_to_device(device.imei, "LOCK", payload)
 
-            # 2. Diffusion Push FCM secondaire (si configuré)
-            if device.fcm_token:
-                success_fcm = FCMService.send_device_command(
-                    fcm_token=device.fcm_token,
-                    action="LOCK",
-                    payload_data=payload
-                )
-
-        # Journal d'audit légal (Code du numérique du Bénin)
         audit = AuditLog(
             driver_id=driver.id,
             device_imei=device.imei if device else None,
             action="LOCK_DEVICE",
             performed_by=performed_by,
-            details=f"Motif: {reason} | FCM envoyé: {success_fcm}"
+            details=f"Motif: {reason} | CloudPush Direct envoyé: {push_sent}"
         )
         db.add(audit)
         await db.commit()
@@ -85,11 +76,12 @@ class LockService:
         Déverrouille immédiatement l'appareil :
         1. Rétablit le statut UP_TO_DATE
         2. Prolonge le bail de validité locale (72h)
-        3. Envoie la commande FCM UNLOCK
+        3. Envoie la commande Cloud Directe UNLOCK (sub-50ms via WebSocket)
         """
         result = await db.execute(select(Driver).where(Driver.id == driver_id))
         driver = result.scalars().first()
         if not driver:
+            logger.error(f"Conducteur ID {driver_id} introuvable pour le déverrouillage.")
             return False
 
         device_res = await db.execute(select(Device).where(Device.driver_id == driver_id))
@@ -97,37 +89,30 @@ class LockService:
 
         driver.current_status = PaymentStatusEnum.UP_TO_DATE
         driver.consecutive_overdue_days = 0
-        success_fcm = False
+        now = datetime.now(timezone.utc)
+        push_sent = False
 
         if device:
             device.is_locked = False
             device.lock_reason = None
-            device.unlocked_at = datetime.utcnow()
+            device.unlocked_at = now
             # Renouvellement du bail hors-ligne pour 72 heures
-            new_lease = datetime.utcnow() + timedelta(hours=settings.OFFLINE_GRACE_PERIOD_HOURS)
+            new_lease = now + timedelta(hours=settings.OFFLINE_GRACE_PERIOD_HOURS)
             device.lease_expires_at = new_lease
 
             payload = {
                 "reason": reason,
                 "lease_expires_at": new_lease.isoformat()
             }
-            # 1. Diffusion Cloud-Native directe (WebSocket)
-            await CloudPushHub.send_command_to_device(device.imei, "UNLOCK", payload)
-
-            # 2. Diffusion Push FCM secondaire (si configuré)
-            if device.fcm_token:
-                success_fcm = FCMService.send_device_command(
-                    fcm_token=device.fcm_token,
-                    action="UNLOCK",
-                    payload_data=payload
-                )
+            # Diffusion Cloud-Native directe (100% Hors Firebase)
+            push_sent = await CloudPushHub.send_command_to_device(device.imei, "UNLOCK", payload)
 
         audit = AuditLog(
             driver_id=driver.id,
             device_imei=device.imei if device else None,
             action="UNLOCK_DEVICE",
             performed_by=performed_by,
-            details=f"Motif: {reason} | FCM envoyé: {success_fcm}"
+            details=f"Motif: {reason} | CloudPush Direct envoyé: {push_sent}"
         )
         db.add(audit)
         await db.commit()
@@ -136,12 +121,12 @@ class LockService:
     @staticmethod
     async def enforce_overdue_locks(db: AsyncSession) -> list[int]:
         """
-        Vérification automatique H24 : tout conducteur dont le retard est >= 3 jours
-        et dont l'appareil n'est pas encore bloqué est verrouillé automatiquement.
+        Contrôle d'audit automatique des impayés :
+        Verrouille automatiquement tout terminal dont le retard est >= 3 jours.
         """
         result = await db.execute(
             select(Driver).where(
-                Driver.consecutive_overdue_days >= 3,
+                Driver.consecutive_overdue_days >= settings.OVERDUE_DAYS_BEFORE_LOCK,
                 Driver.current_status != PaymentStatusEnum.LOCKED
             )
         )
@@ -152,8 +137,8 @@ class LockService:
             success = await LockService.lock_driver_device(
                 db=db,
                 driver_id=drv.id,
-                reason=f"Verrouillage automatique pour impayé de {drv.consecutive_overdue_days} jours consécutifs",
-                performed_by="LOCKY_AUTOLOCK_CRON"
+                reason=f"Verrouillage automatique : impayé de {drv.consecutive_overdue_days} jours consécutifs",
+                performed_by="AUTO_LOCK_ENGINE"
             )
             if success:
                 locked_ids.append(drv.id)

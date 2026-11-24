@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Dict, Any, Optional
 from fastapi import WebSocket
@@ -8,57 +9,71 @@ logger = logging.getLogger("CloudPushHub")
 class CloudPushHub:
     """
     Gestionnaire Cloud-Native de Push & Synchronisation en temps réel (100% Hors Firebase).
-    Maintient les liaisons WebSocket directes avec les agents Android et permet
-    le verrouillage/déverrouillage instantané via le serveur Cloud.
+    Maintient les liaisons WebSocket directes et persistantes avec les agents Android.
+    Garantit le verrouillage et déverrouillage instantané en sub-50ms.
     """
     _active_sockets: Dict[str, WebSocket] = {}
+    _lock = asyncio.Lock()
 
     @classmethod
-    def register_socket(cls, imei: str, websocket: WebSocket):
-        cls._active_sockets[imei] = websocket
-        logger.info(f"[CloudPushHub] Terminal connecté en WebSocket Cloud direct : IMEI {imei}")
+    async def register_socket(cls, imei: str, websocket: WebSocket):
+        async with cls._lock:
+            # Si un ancien socket existe déjà pour cet IMEI, le fermer proprement
+            old_ws = cls._active_sockets.get(imei)
+            if old_ws and old_ws != websocket:
+                try:
+                    await old_ws.close(code=1000, reason="Replaced by new connection")
+                except Exception:
+                    pass
+            cls._active_sockets[imei] = websocket
+            logger.info(f"[CloudPushHub] Terminal connecté en WebSocket Cloud direct : IMEI {imei}")
 
     @classmethod
-    def unregister_socket(cls, imei: str):
-        if imei in cls._active_sockets:
-            del cls._active_sockets[imei]
-            logger.info(f"[CloudPushHub] Terminal déconnecté du WebSocket Cloud : IMEI {imei}")
+    async def unregister_socket(cls, imei: str, websocket: Optional[WebSocket] = None):
+        async with cls._lock:
+            if imei in cls._active_sockets:
+                current_ws = cls._active_sockets[imei]
+                if websocket is None or current_ws == websocket:
+                    del cls._active_sockets[imei]
+                    logger.info(f"[CloudPushHub] Terminal déconnecté du WebSocket Cloud : IMEI {imei}")
 
     @classmethod
-    async def send_command_to_device(cls, imei: Optional[str], action: str, payload_data: Optional[Dict[str, Any]] = None) -> bool:
+    def is_device_online(cls, imei: str) -> bool:
+        return imei in cls._active_sockets
+
+    @classmethod
+    async def send_command_to_device(
+        cls,
+        imei: Optional[str],
+        action: str,
+        payload_data: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """
         Envoie un ordre de commande en direct au terminal via WebSocket Cloud (sub-50ms).
-        Garantit l'acheminement même en cas d'alias ou d'identifiant Android ID.
+        Ne cible STRICTEMENT que le terminal identifié par son IMEI.
         """
-        if not cls._active_sockets:
-            logger.info(f"[CloudPushHub] Aucun terminal connecté en WebSocket. Pris en charge par le Heartbeat HTTP Cloud.")
+        if not imei:
+            logger.warning("[CloudPushHub] IMEI non fourni — commande ignorée.")
             return False
 
         message = {
             "action": action,
-            "imei": imei or "UNKNOWN",
+            "imei": imei,
             **(payload_data or {})
         }
 
-        # 1. Correspondance exacte sur l'IMEI ou identifiant
-        if imei and imei in cls._active_sockets:
+        target_ws: Optional[WebSocket] = None
+        async with cls._lock:
+            target_ws = cls._active_sockets.get(imei)
+
+        if target_ws:
             try:
-                await cls._active_sockets[imei].send_json(message)
-                logger.info(f"[CloudPushHub] Ordre Cloud direct '{action}' transmis à IMEI {imei}")
+                await target_ws.send_json(message)
+                logger.info(f"[CloudPushHub] Ordre direct '{action}' transmis avec succès à IMEI {imei}")
                 return True
             except Exception as e:
-                logger.warning(f"[CloudPushHub] Erreur envoi WebSocket à {imei}: {e}")
-                cls.unregister_socket(imei)
+                logger.warning(f"[CloudPushHub] Échec envoi WebSocket à {imei}: {e}. Fermeture du socket.")
+                await cls.unregister_socket(imei, target_ws)
 
-        # 2. Diffusion à tous les terminaux actifs si un seul ou ciblé
-        sent_any = False
-        for target_id, ws in list(cls._active_sockets.items()):
-            try:
-                await ws.send_json(message)
-                logger.info(f"[CloudPushHub] Ordre Cloud '{action}' diffusé au terminal actif : {target_id}")
-                sent_any = True
-            except Exception as e:
-                logger.warning(f"[CloudPushHub] Socket déconnectée lors de la diffusion : {target_id} ({e})")
-                cls.unregister_socket(target_id)
-
-        return sent_any
+        logger.info(f"[CloudPushHub] IMEI {imei} non connecté en direct. L'ordre sera appliqué lors du prochain contact.")
+        return False

@@ -25,6 +25,9 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://locker_user:locker_pass@db:5432/locker_db
       - SUPPORT_PHONE_NUMBER=+2290191521518
+      - ADMIN_SECRET_KEY=locker_admin_prod_secret_2026_xof
+      - DEVICE_ENROLLMENT_SECRET=locker_device_enrollment_key_xof
+      - ENVIRONMENT=production
     ports:
       - "8000:8000"
     volumes:

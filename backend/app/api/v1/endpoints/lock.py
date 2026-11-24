@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
+from app.core.auth import verify_admin_api_key
 from app.models.driver import Driver, PaymentStatusEnum
 from app.services.lock_service import LockService
 
@@ -12,11 +13,13 @@ router = APIRouter(prefix="", tags=["Lock Operations"])
 async def block_driver(
     driver_id: int,
     reason: str = Body("Blocage manuel administratif", embed=True),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    admin_token: str = Depends(verify_admin_api_key)
 ):
     """
-    Verrouille manuellement ou automatiquement le téléphone d'un conducteur.
-    Envoie le signal haute priorité et active le mode Kiosk d'impayé.
+    Verrouille manuellement l'appareil d'un conducteur.
+    Protégé par clé d'administration X-API-Key.
+    Envoie le signal haute priorité sub-50ms et active le mode Kiosk d'impayé.
     """
     success = await LockService.lock_driver_device(
         db=db,
@@ -33,10 +36,12 @@ async def block_driver(
 async def unblock_driver(
     driver_id: int,
     reason: str = Body("Déblocage administratif", embed=True),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    admin_token: str = Depends(verify_admin_api_key)
 ):
     """
-    Déverrouille manuellement ou suite à un paiement l'appareil du conducteur.
+    Déverrouille l'appareil du conducteur.
+    Protégé par clé d'administration X-API-Key.
     Restaure les fonctionnalités normales du smartphone Android.
     """
     success = await LockService.unlock_driver_device(
@@ -51,7 +56,10 @@ async def unblock_driver(
 
 
 @router.post("/lock/enforce-overdue")
-async def enforce_overdue_locks(db: AsyncSession = Depends(get_db)):
+async def enforce_overdue_locks(
+    db: AsyncSession = Depends(get_db),
+    admin_token: str = Depends(verify_admin_api_key)
+):
     """
     Déclencheur d'audit d'échéance automatique :
     Scanne tous les conducteurs ayant 3 jours ou plus de retard de versement
@@ -69,11 +77,13 @@ async def enforce_overdue_locks(db: AsyncSession = Depends(get_db)):
 async def simulate_overdue_and_lock(
     driver_id: int,
     overdue_days: int = Body(3, embed=True),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    admin_token: str = Depends(verify_admin_api_key)
 ):
     """
     Simule le passage d'un conducteur en impayé (ex: 3 jours de retard)
     et déclenche immédiatement le verrouillage automatique de sécurité.
+    Protégé par clé d'administration X-API-Key.
     """
     res = await db.execute(select(Driver).where(Driver.id == driver_id))
     driver = res.scalars().first()

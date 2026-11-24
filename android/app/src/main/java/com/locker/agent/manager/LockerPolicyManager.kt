@@ -31,9 +31,9 @@ class LockerPolicyManager(private val context: Context) {
     }
 
     /**
-     * Configure l'application pour qu'elle puisse verrouiller le terminal en mode Kiosk LockTask,
+     * Configure l'application pour verrouiller le terminal en mode Kiosk LockTask,
      * accorde automatiquement toutes les permissions nécessaires sans solliciter l'utilisateur
-     * et applique les restrictions de sécurité antivol.
+     * et applique les restrictions de sécurité antivol strictes.
      */
     fun setupDeviceOwnerPolicies() {
         if (!isDeviceOwner()) {
@@ -71,15 +71,16 @@ class LockerPolicyManager(private val context: Context) {
             )
             dpm.setLockTaskPackages(adminComponent, allowedPackages)
 
-            // 3. Empêcher l'extinction, le redémarrage, le mode sans échec et la désinstallation
-            // LOCK_TASK_FEATURE_NONE neutralise complètement le menu Power (extinction / redémarrage indisponible)
+            // 3. Durcissement matériel antivol : neutraliser Power menu, Safe Mode, ADB USB, Réinitialisation
             dpm.setLockTaskFeatures(adminComponent, DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET)
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT)
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_UNINSTALL_APPS)
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_ADD_USER)
+            dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_DEBUGGING_FEATURES)
+            dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_USB_FILE_TRANSFER)
 
-            Log.i(TAG, "Politiques Device Owner configurées avec succès.")
+            Log.i(TAG, "Politiques Device Owner durcies configurées avec succès.")
         } catch (e: Exception) {
             Log.e(TAG, "Erreur lors de la configuration des politiques Device Owner: ${e.message}", e)
         }
@@ -87,8 +88,9 @@ class LockerPolicyManager(private val context: Context) {
 
     /**
      * Déclenche le verrouillage immédiat du téléphone :
-     * 1. Déclenche une notification Full-Screen haute priorité pour contourner le blocage d'activité en arrière-plan d'Android
-     * 2. Lance l'activité plein écran non-quittable
+     * 1. Déclenche une notification Full-Screen haute priorité
+     * 2. Désactive la barre de statut (accès aux réglages rapides)
+     * 3. Lance l'activité plein écran non-quittable
      */
     fun lockDevice(reason: String, supportPhone: String) {
         val prefs = context.getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
@@ -98,10 +100,19 @@ class LockerPolicyManager(private val context: Context) {
             .putString("support_phone", supportPhone)
             .apply()
 
-        // 1. Notification Plein Écran Haute Priorité (Wakeup immédiat même écran éteint ou sur YouTube)
+        // Désactiver la barre de notification et statut si Device Owner (Android 9+)
+        try {
+            if (isDeviceOwner() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                dpm.setStatusBarDisabled(adminComponent, true)
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "setStatusBarDisabled: ${e.message}")
+        }
+
+        // Notification Plein Écran Haute Priorité
         showFullScreenLockNotification(reason, supportPhone)
 
-        // 2. Démarrer directement l'activité
+        // Démarrer directement l'activité Kiosk
         try {
             val intent = Intent(context, LockScreenActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
@@ -158,23 +169,31 @@ class LockerPolicyManager(private val context: Context) {
 
     /**
      * Déverrouille l'appareil :
-     * Rétablit l'état normal et quitte le mode Kiosk.
+     * Rétablit l'état normal, réactive la barre de statut et quitte le mode Kiosk.
      */
     fun unlockDevice() {
         val prefs = context.getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("is_locked", false).apply()
 
-        // 1. Supprimer la notification permanente de blocage
+        // Réactiver la barre de statut si Device Owner
+        try {
+            if (isDeviceOwner() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                dpm.setStatusBarDisabled(adminComponent, false)
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "setStatusBarDisabled restore: ${e.message}")
+        }
+
+        // Supprimer la notification permanente de blocage
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(LOCK_NOTIF_ID)
 
-        // 2. Notifier l'activité de s'arrêter via broadcast explicite
+        // Notifier l'activité de s'arrêter
         val intent = Intent("com.locker.agent.ACTION_UNLOCK").apply {
             setPackage(context.packageName)
         }
         context.sendBroadcast(intent)
 
-        // 3. Envoyer également une intention directe avec EXTRA_UNLOCK pour garantir la fermeture
         try {
             val unlockIntent = Intent(context, LockScreenActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)

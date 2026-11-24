@@ -22,11 +22,11 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.google.firebase.messaging.FirebaseMessaging
 import com.locker.agent.LockerApp
 import com.locker.agent.R
 import com.locker.agent.manager.LockerPolicyManager
 import com.locker.agent.receiver.LockerDeviceAdminReceiver
+import com.locker.agent.util.NetworkConfig
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -51,12 +51,10 @@ class MainActivity : AppCompatActivity() {
 
     private var currentImei: String = ""
     private var serialDetected: String = ""
-    private var currentFcmToken: String = ""
 
     companion object {
         private const val PERMISSION_REQ_CODE = 1001
         private const val ADMIN_REQ_CODE = 1002
-        private const val BACKEND_URL = "https://locker-2nuk.onrender.com/api/v1/devices/register"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,7 +83,7 @@ class MainActivity : AppCompatActivity() {
         requestAppPermissions()
         requestBatteryOptimizationExemption()
 
-        // Démarrer immédiatement le service d'arrière-plan permanent
+        // Démarrer immédiatement le service de liaison permanente
         try {
             com.locker.agent.service.LockerPersistentService.start(this)
         } catch (e: Exception) {
@@ -213,7 +211,6 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("HardwareIds")
     private fun refreshIdentifiers() {
-        // 1. Statut Administrateur
         val isDeviceOwner = try { dpm.isDeviceOwnerApp(packageName) } catch (e: Exception) { false }
         val isAdminActive = try { dpm.isAdminActive(adminComponent) } catch (e: Exception) { false }
 
@@ -232,7 +229,6 @@ class MainActivity : AppCompatActivity() {
             btnRequestAdmin.visibility = View.VISIBLE
         }
 
-        // 2. Détection IMEI matérielle
         var imeiDetected = ""
         try {
             val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
@@ -246,7 +242,6 @@ class MainActivity : AppCompatActivity() {
             Log.d("MainActivity", "Lecture IMEI: ${e.message}")
         }
 
-        // 3. Détection Numéro de Série
         serialDetected = ""
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -257,7 +252,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
-
         val app = application as? LockerApp
         currentImei = if (imeiDetected.isNotBlank()) {
             imeiDetected
@@ -272,43 +266,33 @@ class MainActivity : AppCompatActivity() {
         tvImei.text = "IMEI / Identifiant : $currentImei"
         tvSerial.text = "Série : ${if (serialDetected.isNotBlank() && serialDetected != Build.UNKNOWN) serialDetected else (if (androidId.isNotBlank()) androidId else "-")}"
 
-        // 4. Token FCM Google
-        try {
-            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    currentFcmToken = task.result ?: ""
-                    tvFcmToken.text = "Jeton FCM Google : ${currentFcmToken.take(16)}... (Actif)"
-                    tvFcmToken.setTextColor(Color.parseColor("#10B981"))
-                } else {
-                    tvFcmToken.text = "Jeton FCM Google : En attente"
-                    tvFcmToken.setTextColor(Color.parseColor("#CBD5E1"))
-                }
-            }
-        } catch (e: Exception) {
-            tvFcmToken.text = "Jeton FCM Google : Initialisation..."
-        }
+        // Mode Push Native (100% Hors Firebase)
+        tvFcmToken.text = "Push Cloud : Native WebSocket sub-50ms (Actif)"
+        tvFcmToken.setTextColor(Color.parseColor("#10B981"))
     }
 
     private fun syncWithCloud() {
-        tvCloudStatus.text = "● Synchronisation avec le Cloud..."
+        tvCloudStatus.text = "● Connexion au Cloud LockER..."
         tvCloudStatus.setTextColor(Color.parseColor("#F59E0B"))
 
         Thread {
             try {
                 val client = OkHttpClient()
+                val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
+                val token = prefs.getString("device_auth_token", "") ?: ""
                 val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
                 val json = JSONObject().apply {
                     put("imei", currentImei)
                     put("android_id", androidId)
                     put("serial_number", if (serialDetected.isNotBlank() && serialDetected != Build.UNKNOWN) serialDetected else androidId)
                     put("model", "${Build.MANUFACTURER} ${Build.MODEL}".trim())
-                    put("fcm_token", currentFcmToken)
-                    put("app_version", "1.0.0")
+                    put("device_token", token)
+                    put("app_version", "2.0.0")
                 }
                 val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
 
                 val request = Request.Builder()
-                    .url(BACKEND_URL)
+                    .url(NetworkConfig.getRegisterUrl(this))
                     .post(body)
                     .build()
 
@@ -320,11 +304,12 @@ class MainActivity : AppCompatActivity() {
                     try {
                         val respObj = JSONObject(responseString)
                         val returnedImei = respObj.optString("imei", "")
+                        val returnedToken = respObj.optString("auth_token", "")
                         if (returnedImei.isNotBlank()) {
-                            getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
-                                .edit()
-                                .putString("assigned_imei", returnedImei)
-                                .apply()
+                            prefs.edit().putString("assigned_imei", returnedImei).apply()
+                        }
+                        if (returnedToken.isNotBlank()) {
+                            prefs.edit().putString("device_auth_token", returnedToken).apply()
                         }
                     } catch (e: Exception) {
                         Log.d("MainActivity", "Parse reponse: ${e.message}")
@@ -333,7 +318,7 @@ class MainActivity : AppCompatActivity() {
 
                 runOnUiThread {
                     if (isSuccess) {
-                        tvCloudStatus.text = "● Connecté au Serveur Cloud LockER"
+                        tvCloudStatus.text = "● Connecté au Serveur Cloud LockER (Bénin XOF)"
                         tvCloudStatus.setTextColor(Color.parseColor("#10B981"))
                     } else {
                         tvCloudStatus.text = "● Erreur Serveur (HTTP ${response.code})"

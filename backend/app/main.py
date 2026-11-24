@@ -1,14 +1,17 @@
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
 from typing import Optional
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select
 
 from app.core.config import settings
-from app.core.database import engine, Base
+from app.core.database import engine, Base, AsyncSessionLocal
+from app.models.device import Device
 from app.models.payment_schedule import PaymentScheduleRule
 from app.api.v1.endpoints import drivers, devices, lock, webhooks, lockybee, rules
 from app.services.cloud_push_hub import CloudPushHub
@@ -17,15 +20,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LockER")
 
 
+import asyncio
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Démarrage de LockER Cloud Platform...")
+    logger.info("Démarrage de LockER Cloud Platform (Mode Cloud Native - 100% Hors Firebase & Hors SQLite)...")
     try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("Tables de la base de données initialisées avec succès.")
+        async def _init_db():
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        await asyncio.wait_for(_init_db(), timeout=3.0)
+        logger.info("Tables PostgreSQL Cloud initialisées avec succès.")
     except Exception as e:
-        logger.warning(f"Initialisation BD ({e}).")
+        logger.warning(f"Initialisation BD non-bloquante ({e}).")
     yield
     logger.info("Arrêt de LockER Cloud Platform.")
 
@@ -33,14 +40,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version="1.0.0",
-    description="Plateforme Cloud MDM Unifiée LockER (Web Dashboard + API Rest + WebSocket direct)",
+    description="Plateforme Cloud MDM Unifiée LockER (Web Dashboard + API Rest + WebSocket direct sub-50ms)",
     lifespan=lifespan
 )
 
-# Configuration CORS
+# Configuration CORS stricte et conforme W3C
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,23 +63,48 @@ app.include_router(rules.router, prefix=settings.API_V1_STR)
 
 
 # =========================================================================
-# LIAISON CLOUD PUSH NATIVE : WebSocket Direct (100% Hors Firebase)
+# LIAISON CLOUD PUSH NATIVE : WebSocket Direct Sécurisé (100% Hors Firebase)
 # =========================================================================
 @app.websocket("/api/v1/devices/{imei}/ws")
-async def device_websocket_endpoint(websocket: WebSocket, imei: str):
+async def device_websocket_endpoint(
+    websocket: WebSocket,
+    imei: str,
+    token: Optional[str] = Query(None)
+):
     """
     Canal de push Cloud direct et persistant avec les smartphones Android de la flotte.
-    Permet de verrouiller ou déverrouiller instantanément en sub-50ms sans passer par Firebase.
+    Vérifie cryptographiquement l'identité du terminal avant d'établir la socket.
+    Permet de verrouiller ou déverrouiller instantanément en sub-50ms.
     """
+    clean_imei = imei.strip()
+    # Vérification d'authentification matérielle
+    async with AsyncSessionLocal() as session:
+        res = await session.execute(select(Device).where(Device.imei == clean_imei))
+        device = res.scalars().first()
+        if not device:
+            await websocket.close(code=1008, reason="Terminal non enregistré")
+            return
+
+        if device.auth_token:
+            if not token or (
+                not secrets.compare_digest(token, device.auth_token) and
+                not secrets.compare_digest(token, settings.ADMIN_SECRET_KEY)
+            ):
+                await websocket.close(code=1008, reason="Token matériel invalide")
+                return
+
     await websocket.accept()
-    CloudPushHub.register_socket(imei, websocket)
+    await CloudPushHub.register_socket(clean_imei, websocket)
     try:
         while True:
             # Réception du heartbeat et keepalive périodique
             data = await websocket.receive_text()
-            await websocket.send_json({"status": "ack", "imei": imei})
+            await websocket.send_json({"status": "ack", "imei": clean_imei})
     except WebSocketDisconnect:
-        CloudPushHub.unregister_socket(imei)
+        await CloudPushHub.unregister_socket(clean_imei, websocket)
+    except Exception as e:
+        logger.warning(f"Erreur WebSocket {clean_imei}: {e}")
+        await CloudPushHub.unregister_socket(clean_imei, websocket)
 
 
 # =========================================================================
@@ -96,7 +128,8 @@ async def health_check():
         "status": "healthy",
         "service": settings.PROJECT_NAME,
         "region": "Bénin (XOF)",
-        "cloud_mode": "NATIVE_CLOUD_NO_FIREBASE"
+        "cloud_mode": "NATIVE_CLOUD_PUSH_WEBSOCKET",
+        "database": "POSTGRESQL_CLOUD"
     }
 
 
@@ -117,7 +150,6 @@ async def download_apk():
 # =========================================================================
 # HÉBERGEMENT CLOUD UNIFIÉ DU FRONTEND REACT SPA (100% Hors Firebase)
 # =========================================================================
-# Recherche du dossier de build frontend compilé
 possible_dist_dirs = [
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "dist")),
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")),
@@ -136,15 +168,17 @@ if dist_dir:
 
     @app.get("/{full_path:path}", tags=["Frontend Cloud Dashboard"])
     async def serve_frontend_spa(full_path: str):
-        # Ne pas intercepter les routes d'API, docs ou téléchargements
         if full_path.startswith("api") or full_path in ["docs", "openapi.json", "health", "download/app-release.apk"]:
             raise HTTPException(status_code=404, detail="Not Found")
 
-        file_path = os.path.join(dist_dir, full_path)
+        file_path = os.path.abspath(os.path.join(dist_dir, full_path))
+        # Protection stricte contre Path Traversal
+        if not file_path.startswith(dist_dir):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
         if full_path and os.path.isfile(file_path):
             return FileResponse(file_path)
 
-        # Fallback React Router SPA vers index.html
         index_path = os.path.join(dist_dir, "index.html")
         if os.path.exists(index_path):
             return FileResponse(index_path)

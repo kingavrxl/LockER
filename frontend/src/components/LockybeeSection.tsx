@@ -7,6 +7,7 @@ import {
   Zap
 } from 'lucide-react';
 import { LockybeeAudit, ChatMessage } from '../types';
+import { secureFetch } from '../api';
 
 interface LockybeeSectionProps {
   apiUrl: string;
@@ -45,7 +46,7 @@ export const LockybeeSection: React.FC<LockybeeSectionProps> = ({ apiUrl, theme 
     setIsLoadingAudit(true);
     const cleanUrl = apiUrl.replace(/\/$/, '');
     try {
-      const res = await fetch(`${cleanUrl}/api/v1/lockybee/audit`);
+      const res = await secureFetch(`${cleanUrl}/api/v1/lockybee/audit`);
       if (res.ok) {
         const data = await res.json();
         setAuditData(data);
@@ -96,9 +97,8 @@ export const LockybeeSection: React.FC<LockybeeSectionProps> = ({ apiUrl, theme 
     if (!customKey.trim()) return;
     const cleanUrl = apiUrl.replace(/\/$/, '');
     try {
-      const res = await fetch(`${cleanUrl}/api/v1/lockybee/config`, {
+      const res = await secureFetch(`${cleanUrl}/api/v1/lockybee/config`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           api_key: customKey.trim(),
           provider: selectedProvider
@@ -140,9 +140,8 @@ export const LockybeeSection: React.FC<LockybeeSectionProps> = ({ apiUrl, theme 
 
     const cleanUrl = apiUrl.replace(/\/$/, '');
     try {
-      const res = await fetch(`${cleanUrl}/api/v1/lockybee/chat`, {
+      const res = await secureFetch(`${cleanUrl}/api/v1/lockybee/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text })
       });
 

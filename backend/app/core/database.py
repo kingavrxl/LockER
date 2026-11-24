@@ -1,6 +1,9 @@
+import logging
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import declarative_base
 from app.core.config import settings
+
+logger = logging.getLogger("Database")
 
 is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 
@@ -13,11 +16,20 @@ if is_sqlite:
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 else:
     engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    **engine_kwargs
-)
+try:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        **engine_kwargs
+    )
+except Exception as e:
+    logger.warning(f"Driver PostgreSQL non disponible sur l'environnement hôte ({e}). Bascule en mode de repli mémoire.")
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False}
+    )
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

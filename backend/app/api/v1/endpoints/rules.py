@@ -1,11 +1,12 @@
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, ConfigDict
 
 from app.core.database import get_db
+from app.core.auth import verify_admin_api_key
 from app.models.payment_schedule import PaymentScheduleRule
 from app.models.driver import Driver
 
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/rules", tags=["Règles & Échéanciers"])
 
 class RuleCreate(BaseModel):
     title: Optional[str] = "Nouvel Échéancier"
-    due_date_str: str # Ex: "25/11/2026" ou "Chaque 25 du mois"
+    due_date_str: str  # Ex: "25/11/2026" ou "Chaque 25 du mois"
     due_day: Optional[int] = None
     due_month: Optional[int] = None
     due_year: Optional[int] = None
@@ -44,9 +45,13 @@ class RuleOut(BaseModel):
 
 
 @router.get("", response_model=List[RuleOut])
-async def list_rules(db: AsyncSession = Depends(get_db)):
+async def list_rules(
+    db: AsyncSession = Depends(get_db),
+    admin_token: str = Depends(verify_admin_api_key)
+):
     """
     Récupère la liste des règles d'échéancier (jour/mois/an et modalités de paiement).
+    Protégé par clé d'administration.
     """
     res = await db.execute(select(PaymentScheduleRule).order_by(PaymentScheduleRule.id.desc()))
     rules = res.scalars().all()
@@ -72,9 +77,14 @@ async def list_rules(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("", response_model=RuleOut)
-async def create_rule(payload: RuleCreate, db: AsyncSession = Depends(get_db)):
+async def create_rule(
+    payload: RuleCreate,
+    db: AsyncSession = Depends(get_db),
+    admin_token: str = Depends(verify_admin_api_key)
+):
     """
-    Crée une nouvelle règle d'échéancier de versement avec date (jour/mois/an) et moyen de paiement.
+    Crée une nouvelle règle d'échéancier de versement.
+    Protégé par clé d'administration.
     """
     rule = PaymentScheduleRule(
         title=payload.title or "Échéancier de Versement",
@@ -96,7 +106,15 @@ async def create_rule(payload: RuleCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/{rule_id}")
-async def delete_rule(rule_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_rule(
+    rule_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin_token: str = Depends(verify_admin_api_key)
+):
+    """
+    Supprime une règle d'échéancier.
+    Protégé par clé d'administration.
+    """
     res = await db.execute(select(PaymentScheduleRule).where(PaymentScheduleRule.id == rule_id))
     rule = res.scalars().first()
     if not rule:

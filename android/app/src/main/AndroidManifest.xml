@@ -20,6 +20,10 @@
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE" tools:ignore="ProtectedPermissions" />
 
+    <permission
+        android:name="com.locker.agent.permission.INTERNAL_COMMAND"
+        android:protectionLevel="signature" />
+
     <application
         android:name=".LockerApp"
         android:allowBackup="false"
@@ -48,16 +52,7 @@
             </intent-filter>
         </receiver>
 
-        <!-- Service Firebase Cloud Messaging pour réception des commandes LOCK/UNLOCK -->
-        <service
-            android:name=".service.LockerFirebaseMessagingService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
-        <!-- Service d'Arrière-Plan Permanent (Daemon MDM Haute Disponibilité) -->
+        <!-- Service d'Arrière-Plan Permanent (Daemon Cloud WebSocket Direct sub-50ms) -->
         <service
             android:name=".service.LockerPersistentService"
             android:exported="false"
@@ -73,7 +68,6 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="android.intent.action.REBOOT" />
-                <action android:name="com.locker.agent.RESTART_DAEMON" />
             </intent-filter>
         </receiver>
 

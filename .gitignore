@@ -49,3 +49,7 @@ Thumbs.db
 .firebase/
 inst_user_settings.tmp
 backend/locker.db
+*.db
+*.sqlite
+*.sqlite3
+google-services.json

@@ -10,6 +10,7 @@ import {
   Clock
 } from 'lucide-react';
 import { PaymentScheduleRule } from '../types';
+import { secureFetch } from '../api';
 
 interface RulesSectionProps {
   apiUrl: string;
@@ -36,7 +37,7 @@ export const RulesSection: React.FC<RulesSectionProps> = ({ apiUrl, theme }) => 
     setIsLoading(true);
     const cleanUrl = apiUrl.replace(/\/$/, '');
     try {
-      const res = await fetch(`${cleanUrl}/api/v1/rules`);
+      const res = await secureFetch(`${cleanUrl}/api/v1/rules`);
       if (res.ok) {
         const data = await res.json();
         setRules(data);
@@ -59,9 +60,8 @@ export const RulesSection: React.FC<RulesSectionProps> = ({ apiUrl, theme }) => 
     setIsSubmitting(true);
     const cleanUrl = apiUrl.replace(/\/$/, '');
     try {
-      const res = await fetch(`${cleanUrl}/api/v1/rules`, {
+      const res = await secureFetch(`${cleanUrl}/api/v1/rules`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: title.trim() || `Échéancier (${dueDateStr})`,
           due_date_str: dueDateStr.trim(),
@@ -89,7 +89,7 @@ export const RulesSection: React.FC<RulesSectionProps> = ({ apiUrl, theme }) => 
     if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette règle d'échéancier ?")) return;
     const cleanUrl = apiUrl.replace(/\/$/, '');
     try {
-      const res = await fetch(`${cleanUrl}/api/v1/rules/${ruleId}`, {
+      const res = await secureFetch(`${cleanUrl}/api/v1/rules/${ruleId}`, {
         method: 'DELETE'
       });
       if (res.ok) {

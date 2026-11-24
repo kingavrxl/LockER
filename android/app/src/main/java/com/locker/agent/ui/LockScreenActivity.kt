@@ -169,14 +169,16 @@ class LockScreenActivity : Activity() {
                     val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
                     val androidId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: ""
                     val imei = prefs.getString("assigned_imei", androidId) ?: androidId
+                    val token = prefs.getString("device_auth_token", "") ?: ""
                     val client = OkHttpClient()
                     val json = JSONObject().apply {
                         put("imei", imei)
                         put("android_id", androidId)
+                        put("device_token", token)
                     }
                     val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
                     val request = Request.Builder()
-                        .url("https://locker-2nuk.onrender.com/api/v1/devices/heartbeat")
+                        .url(com.locker.agent.util.NetworkConfig.getHeartbeatUrl(this@LockScreenActivity))
                         .post(body)
                         .build()
                     val response = client.newCall(request).execute()

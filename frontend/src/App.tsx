@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import { Driver, Device } from './types';
+import { secureFetch, getAdminApiKey, setAdminApiKey } from './api';
 import { Navigation } from './components/Navigation';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import { LiveMapSection } from './components/LiveMapSection';
@@ -75,6 +76,7 @@ export function App() {
 
   const [apiUrl, setApiUrl] = useState(getInitialApi);
   const [tempApiUrl, setTempApiUrl] = useState(apiUrl);
+  const [tempApiKey, setTempApiKey] = useState(getAdminApiKey);
   const [isApiOnline, setIsApiOnline] = useState<boolean | null>(null);
 
   // Edit form state
@@ -96,9 +98,9 @@ export function App() {
     try {
       const cleanUrl = apiUrl.replace(/\/$/, '');
       const [driversRes, devicesRes, auditRes] = await Promise.all([
-        fetch(`${cleanUrl}/api/v1/drivers`),
-        fetch(`${cleanUrl}/api/v1/devices`),
-        fetch(`${cleanUrl}/api/v1/lockybee/audit`).catch(() => null)
+        secureFetch(`${cleanUrl}/api/v1/drivers`),
+        secureFetch(`${cleanUrl}/api/v1/devices`),
+        secureFetch(`${cleanUrl}/api/v1/lockybee/audit`).catch(() => null)
       ]);
 
       if (driversRes.ok) {
@@ -146,9 +148,8 @@ export function App() {
     const cleanUrl = apiUrl.replace(/\/$/, '');
 
     try {
-      const res = await fetch(`${cleanUrl}/api/v1/${action}/${driver.id}`, {
+      const res = await secureFetch(`${cleanUrl}/api/v1/${action}/${driver.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason })
       });
 
@@ -177,9 +178,8 @@ export function App() {
     const cleanUrl = apiUrl.replace(/\/$/, '');
 
     try {
-      const res = await fetch(`${cleanUrl}/api/v1/drivers/${editingDriver.id}`, {
+      const res = await secureFetch(`${cleanUrl}/api/v1/drivers/${editingDriver.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm)
       });
 
@@ -199,7 +199,7 @@ export function App() {
     const cleanUrl = apiUrl.replace(/\/$/, '');
 
     try {
-      const res = await fetch(`${cleanUrl}/api/v1/drivers/${driverId}`, {
+      const res = await secureFetch(`${cleanUrl}/api/v1/drivers/${driverId}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -249,6 +249,7 @@ export function App() {
         onOpenAddWizard={() => setShowAddWizard(true)}
         onOpenConfigApi={() => {
           setTempApiUrl(apiUrl);
+          setTempApiKey(getAdminApiKey());
           setShowApiModal(true);
         }}
         isApiOnline={isApiOnline}
@@ -678,6 +679,19 @@ export function App() {
                   Localhost (8000)
                 </button>
               </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-400 mb-1 block">Clé d'Administration API (X-API-Key)</label>
+                <input 
+                  type="password" 
+                  value={tempApiKey} 
+                  onChange={(e) => setTempApiKey(e.target.value)}
+                  placeholder="locker_admin_prod_secret_2026_xof"
+                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none focus:border-emerald-500 font-mono ${
+                    isDark ? 'bg-[#070D1E] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-800'
+                  }`}
+                />
+              </div>
             </div>
 
             <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-700/50">
@@ -694,8 +708,9 @@ export function App() {
                   const cleaned = tempApiUrl.trim().replace(/\/$/, '');
                   setApiUrl(cleaned);
                   localStorage.setItem('locker_api_url', cleaned);
+                  setAdminApiKey(tempApiKey);
                   setShowApiModal(false);
-                  showToast(`URL API mise à jour : ${cleaned}`, 'info');
+                  showToast(`Paramètres API mis à jour !`, 'info');
                   setTimeout(fetchData, 300);
                 }}
                 className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/30 transition"

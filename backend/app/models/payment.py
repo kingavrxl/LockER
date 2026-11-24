@@ -1,8 +1,12 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric, Enum, Text
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
 class ProviderEnum(str, enum.Enum):
@@ -30,8 +34,8 @@ class Payment(Base):
     status = Column(Enum(TransactionStatusEnum), default=TransactionStatusEnum.SUCCESS, nullable=False)
     raw_payload = Column(Text, nullable=True)
     
-    payment_date = Column(DateTime, default=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    payment_date = Column(DateTime, default=_utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     # Relations
     driver = relationship("Driver", back_populates="payments")

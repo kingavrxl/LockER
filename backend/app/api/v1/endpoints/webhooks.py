@@ -1,18 +1,23 @@
 import json
 import logging
+import hmac
+import hashlib
 from datetime import datetime
 from typing import Optional
+import stripe
 from pydantic import BaseModel
-from fastapi import APIRouter, Request, HTTPException, Depends, Body
+from fastapi import APIRouter, Request, HTTPException, Depends, Body, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
 from app.core.database import get_db
+from app.core.auth import verify_admin_api_key
 from app.models.driver import Driver
 from app.models.payment import Payment, ProviderEnum, TransactionStatusEnum
 from app.services.lock_service import LockService
 from app.core.config import settings
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("Webhooks")
 router = APIRouter(prefix="/webhooks", tags=["Webhooks & Payments"])
 
 
@@ -20,31 +25,48 @@ router = APIRouter(prefix="/webhooks", tags=["Webhooks & Payments"])
 async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     """
     Webhook Stripe pour la réception des paiements par carte bancaire.
-    Déclenche le déblocage instantané si l'appareil était verrouillé.
+    Vérifie rigoureusement la signature cryptographique Stripe avant tout déblocage.
     """
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
 
-    try:
-        event = json.loads(payload)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+    if not sig_header:
+        raise HTTPException(status_code=400, detail="En-tête stripe-signature manquant.")
+
+    if settings.STRIPE_WEBHOOK_SECRET and settings.STRIPE_WEBHOOK_SECRET != "whsec_placeholder":
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
+            )
+        except stripe.error.SignatureVerificationError as e:
+            logger.error(f"Rejet signature Stripe: {e}")
+            raise HTTPException(status_code=400, detail="Signature Stripe invalide.")
+        except Exception as e:
+            logger.error(f"Erreur décodage Stripe: {e}")
+            raise HTTPException(status_code=400, detail="Événement Stripe malformé.")
+    else:
+        if settings.ENVIRONMENT == "production":
+            raise HTTPException(status_code=500, detail="STRIPE_WEBHOOK_SECRET non configuré en production.")
+        try:
+            event = json.loads(payload)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON payload.")
 
     event_type = event.get("type")
-    logger.info(f"Événement Stripe reçu : {event_type}")
+    logger.info(f"Événement Stripe validé : {event_type}")
 
     if event_type == "payment_intent.succeeded":
         payment_intent = event["data"]["object"]
         metadata = payment_intent.get("metadata", {})
         driver_id = metadata.get("driver_id")
-        amount = payment_intent.get("amount_received", 0) / 100.0  # centimes
+        amount = payment_intent.get("amount_received", 0) / 100.0
 
         if driver_id:
             driver_id = int(driver_id)
             payment = Payment(
                 driver_id=driver_id,
                 amount=amount,
-                currency=payment_intent.get("currency", "eur").upper(),
+                currency=payment_intent.get("currency", "xof").upper(),
                 provider=ProviderEnum.STRIPE,
                 transaction_id=payment_intent.get("id"),
                 status=TransactionStatusEnum.SUCCESS,
@@ -66,24 +88,28 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.post("/fedapay")
 async def fedapay_webhook(
-    payload: dict = Body(..., example={
-        "name": "transaction.approved",
-        "entity": {
-            "id": 789123,
-            "amount": 5000,
-            "reference": "MTN_MOMO_BENIN_OK_0191521518",
-            "status": "approved",
-            "custom_metadata": {
-                "driver_id": 3
-            }
-        }
-    }),
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Webhook FedaPay / Mobile Money Bénin (MTN MoMo, Moov Money).
-    Très répandu au Bénin pour les paiements conducteurs en Francs CFA (XOF).
+    Vérifie la signature cryptographique du webhook pour prévenir toute falsification.
     """
+    raw_body = await request.body()
+    sig_header = request.headers.get("x-fedapay-signature")
+
+    if settings.FEDAPAY_SECRET_KEY and settings.FEDAPAY_SECRET_KEY != "fp_live_placeholder":
+        if not sig_header:
+            raise HTTPException(status_code=400, detail="Header x-fedapay-signature manquant.")
+        computed_sig = hmac.new(settings.FEDAPAY_SECRET_KEY.encode(), raw_body, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig_header, computed_sig):
+            raise HTTPException(status_code=400, detail="Signature FedaPay invalide.")
+
+    try:
+        payload = json.loads(raw_body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Payload JSON FedaPay invalide.")
+
     event_name = payload.get("name")
     logger.info(f"Webhook FedaPay reçu : {event_name}")
 
@@ -129,10 +155,12 @@ class PaymentSimulationRequest(BaseModel):
 @router.post("/simulate-payment")
 async def simulate_driver_payment(
     payload: PaymentSimulationRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    admin_token: str = Depends(verify_admin_api_key)
 ):
     """
     Simule un paiement direct par le conducteur (MTN MoMo Bénin, Moov Money ou Carte).
+    STRICTEMENT PROTÉGÉ : Seul l'administrateur authentifié peut déclencher une simulation.
     Effectue le déblocage automatique instantané de l'appareil et prolonge le bail MDM.
     """
     res = await db.execute(select(Driver).where(Driver.id == payload.driver_id))

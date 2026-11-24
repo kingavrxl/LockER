@@ -1,8 +1,12 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Enum
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
 class PaymentStatusEnum(str, enum.Enum):
@@ -25,8 +29,8 @@ class Driver(Base):
     current_status = Column(Enum(PaymentStatusEnum), default=PaymentStatusEnum.UP_TO_DATE, nullable=False)
     consecutive_overdue_days = Column(Integer, default=0)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     # Relations
     device = relationship("Device", back_populates="driver", uselist=False)

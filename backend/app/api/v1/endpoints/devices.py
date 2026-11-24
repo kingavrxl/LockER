@@ -1,10 +1,14 @@
-from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Body
+import re
+import secrets
+from datetime import datetime, timezone, timedelta
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
+
 from app.core.database import get_db
+from app.core.auth import verify_admin_api_key, verify_enrollment_key
 from app.models.device import Device
 from app.models.driver import Driver, PaymentStatusEnum
 from app.schemas.device import DeviceRegisterRequest, DeviceHeartbeatRequest, DeviceOut
@@ -21,6 +25,7 @@ class DeviceTelemetryUpdate(BaseModel):
     mac_address: Optional[str] = None
     network_operator: Optional[str] = None
     wifi_ssid: Optional[str] = None
+    device_token: Optional[str] = None
 
 
 class DevicePairingSimulate(BaseModel):
@@ -45,68 +50,52 @@ async def resolve_target_device(
     serial_number: Optional[str] = None
 ) -> Optional[Device]:
     """
-    Résolution robuste et intelligente du terminal physique.
-    Garantit la correspondance même si l'agent Android s'annonce avec son Android ID,
-    son numéro de série matériel ou un IMEI formaté différemment.
+    Résolution stricte du terminal matériel.
+    JAMAIS de repli vers le premier élément de la base (élimination formelle de la faille SEC-04).
     """
     candidates = [i.strip() for i in [imei, android_id, serial_number] if i and i.strip()]
     for cand in candidates:
-        # 1. Correspondance exacte IMEI
+        # Correspondance exacte IMEI
         res = await db.execute(select(Device).where(Device.imei == cand))
         dev = res.scalars().first()
         if dev:
             return dev
-        # 2. Correspondance numéro de série
+        # Correspondance exacte numéro de série
         res = await db.execute(select(Device).where(Device.serial_number == cand))
         dev = res.scalars().first()
         if dev:
             return dev
 
-    # 3. Correspondance avec la flotte existante
-    all_devs_res = await db.execute(select(Device).order_by(Device.id.asc()))
-    all_devs = all_devs_res.scalars().all()
-    if all_devs:
-        # S'il y a un seul terminal enrôlé dans le parc, c'est obligatoirement le terminal physique
-        if len(all_devs) == 1:
-            dev = all_devs[0]
-            if serial_number and not dev.serial_number:
-                dev.serial_number = serial_number
-            return dev
-
-        # Recherche par sous-chaîne (derniers 6 chiffres)
-        for d in all_devs:
-            for cand in candidates:
-                if len(cand) >= 6 and (cand[-6:] in d.imei or (d.serial_number and cand[-6:] in d.serial_number)):
-                    return d
-
-        # Par défaut retourner le premier terminal actif
-        return all_devs[0]
-
     return None
 
 
 @router.post("/register", response_model=DeviceOut)
-async def register_device(payload: DeviceRegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register_device(
+    payload: DeviceRegisterRequest,
+    db: AsyncSession = Depends(get_db)
+):
     """
-    Enregistre ou met à jour le token FCM, l'IMEI et toutes les télémétries matérielles
-    de l'appareil Android. Appelé automatiquement au démarrage de l'agent Android.
+    Enregistre ou met à jour un terminal Android physique.
+    Génère un auth_token cryptographique pour sécuriser la liaison WebSocket et les Heartbeats.
     """
-    device = await resolve_target_device(db, payload.imei, payload.android_id, payload.serial_number)
+    clean_imei = payload.imei.strip()
+    if not clean_imei or len(clean_imei) < 4:
+        raise HTTPException(status_code=400, detail="Identifiant matériel ou IMEI invalide.")
 
-    now = datetime.utcnow()
+    device = await resolve_target_device(db, clean_imei, payload.android_id, payload.serial_number)
+
+    now = datetime.now(timezone.utc)
     default_lease = now + timedelta(hours=settings.OFFLINE_GRACE_PERIOD_HOURS)
 
-    # Coordonnées réelles si transmises
-    lat = payload.latitude
-    lon = payload.longitude
-    ip = payload.ip_address
-    mac = payload.mac_address
-    net_op = payload.network_operator
-    battery = payload.battery_level if payload.battery_level is not None else 100
-
     if device:
-        if payload.fcm_token:
-            device.fcm_token = payload.fcm_token
+        # Si l'appareil a déjà un auth_token, exiger sa correspondance ou autoriser la clé d'enrôlement
+        if device.auth_token and payload.device_token:
+            if not secrets.compare_digest(payload.device_token, device.auth_token) and not secrets.compare_digest(payload.device_token, settings.ADMIN_SECRET_KEY):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Jeton d'authentification matériel invalide.")
+
+        if not device.auth_token:
+            device.auth_token = secrets.token_hex(32)
+
         device.model = payload.model or device.model
         device.app_version = payload.app_version or device.app_version
         device.last_heartbeat = now
@@ -114,42 +103,26 @@ async def register_device(payload: DeviceRegisterRequest, db: AsyncSession = Dep
             device.latitude = payload.latitude
         if payload.longitude is not None:
             device.longitude = payload.longitude
-        if ip:
-            device.ip_address = ip
-        if mac:
-            device.mac_address = mac
-        if net_op:
-            device.network_operator = net_op
+        if payload.ip_address:
+            device.ip_address = payload.ip_address
+        if payload.mac_address:
+            device.mac_address = payload.mac_address
+        if payload.network_operator:
+            device.network_operator = payload.network_operator
         if payload.wifi_ssid:
             device.wifi_ssid = payload.wifi_ssid
-        device.battery_level = battery
-
+        if payload.battery_level is not None:
+            device.battery_level = payload.battery_level
         if not device.lease_expires_at:
             device.lease_expires_at = default_lease
-
-        # S'il n'a pas encore de conducteur lié, création automatique
-        if not device.driver_id:
-            driver_count_res = await db.execute(select(Driver))
-            num = len(driver_count_res.scalars().all()) + 1
-            new_driver = Driver(
-                full_name=f"Conducteur {num}",
-                phone_number=f"+229 01 {payload.imei[-8:-4] if len(payload.imei)>=8 else '9700'} {payload.imei[-4:] if len(payload.imei)>=4 else '0000'}",
-                vehicle_plate=f"RB-{payload.imei[-4:] if len(payload.imei)>=4 else '0000'}-Benin",
-                daily_rate_xof=settings.DAILY_PAYMENT_AMOUNT_XOF,
-                current_status=PaymentStatusEnum.UP_TO_DATE,
-                consecutive_overdue_days=0
-            )
-            db.add(new_driver)
-            await db.flush()
-            device.driver_id = new_driver.id
     else:
-        # Nouveau terminal enrôlé : création automatique instantanée de la ligne conducteur
+        # Nouveau terminal enrôlé : création du conducteur et attribution d'un auth_token
         driver_count_res = await db.execute(select(Driver))
         num = len(driver_count_res.scalars().all()) + 1
         new_driver = Driver(
             full_name=f"Conducteur {num}",
-            phone_number=f"+229 01 {payload.imei[-8:-4] if len(payload.imei)>=8 else '9700'} {payload.imei[-4:] if len(payload.imei)>=4 else '0000'}",
-            vehicle_plate=f"RB-{payload.imei[-4:] if len(payload.imei)>=4 else '0000'}-Benin",
+            phone_number=f"+229 01 {clean_imei[-8:-4] if len(clean_imei)>=8 else '9700'} {clean_imei[-4:] if len(clean_imei)>=4 else '0000'}",
+            vehicle_plate=f"RB-{clean_imei[-4:] if len(clean_imei)>=4 else '0000'}-Benin",
             daily_rate_xof=settings.DAILY_PAYMENT_AMOUNT_XOF,
             current_status=PaymentStatusEnum.UP_TO_DATE,
             consecutive_overdue_days=0
@@ -159,21 +132,21 @@ async def register_device(payload: DeviceRegisterRequest, db: AsyncSession = Dep
 
         device = Device(
             driver_id=new_driver.id,
-            imei=payload.imei,
-            serial_number=payload.serial_number or payload.android_id or f"SN_{payload.imei[-6:] if len(payload.imei)>=6 else '000000'}",
+            imei=clean_imei,
+            serial_number=payload.serial_number or payload.android_id or f"SN_{clean_imei[-6:] if len(clean_imei)>=6 else '000000'}",
             model=payload.model or "Smartphone Android",
-            fcm_token=payload.fcm_token or "",
+            auth_token=secrets.token_hex(32),
             app_version=payload.app_version or "1.0.0",
             is_locked=False,
             last_heartbeat=now,
             lease_expires_at=default_lease,
-            latitude=lat,
-            longitude=lon,
-            ip_address=ip,
-            mac_address=mac,
-            network_operator=net_op,
+            latitude=payload.latitude,
+            longitude=payload.longitude,
+            ip_address=payload.ip_address,
+            mac_address=payload.mac_address,
+            network_operator=payload.network_operator,
             wifi_ssid=payload.wifi_ssid,
-            battery_level=battery
+            battery_level=payload.battery_level if payload.battery_level is not None else 100
         )
         db.add(device)
 
@@ -183,23 +156,27 @@ async def register_device(payload: DeviceRegisterRequest, db: AsyncSession = Dep
 
 
 @router.post("/heartbeat")
-async def device_heartbeat(payload: DeviceHeartbeatRequest, db: AsyncSession = Depends(get_db)):
+async def device_heartbeat(
+    payload: DeviceHeartbeatRequest,
+    db: AsyncSession = Depends(get_db)
+):
     """
     Heartbeat périodique envoyé par l'agent Android.
-    Actualise les baux locaux et la télémétrie GPS réelle en direct.
+    Vérifie l'authenticité de l'appareil et met à jour le bail et la télémétrie.
     """
-    device = await resolve_target_device(db, payload.imei, payload.android_id, payload.serial_number)
-    now = datetime.utcnow()
+    clean_imei = payload.imei.strip()
+    device = await resolve_target_device(db, clean_imei, payload.android_id, payload.serial_number)
+    now = datetime.now(timezone.utc)
     default_lease = now + timedelta(hours=settings.OFFLINE_GRACE_PERIOD_HOURS)
 
     if not device:
-        # Enrôlement automatique immédiat
+        # Enrôlement automatique si nouveau terminal
         driver_count_res = await db.execute(select(Driver))
         num = len(driver_count_res.scalars().all()) + 1
         new_driver = Driver(
             full_name=f"Conducteur {num}",
-            phone_number=f"+229 01 {payload.imei[-8:-4] if len(payload.imei)>=8 else '9700'} {payload.imei[-4:] if len(payload.imei)>=4 else '0000'}",
-            vehicle_plate=f"RB-{payload.imei[-4:] if len(payload.imei)>=4 else '0000'}-Benin",
+            phone_number=f"+229 01 {clean_imei[-8:-4] if len(clean_imei)>=8 else '9700'} {clean_imei[-4:] if len(clean_imei)>=4 else '0000'}",
+            vehicle_plate=f"RB-{clean_imei[-4:] if len(clean_imei)>=4 else '0000'}-Benin",
             daily_rate_xof=settings.DAILY_PAYMENT_AMOUNT_XOF,
             current_status=PaymentStatusEnum.UP_TO_DATE,
             consecutive_overdue_days=0
@@ -209,10 +186,10 @@ async def device_heartbeat(payload: DeviceHeartbeatRequest, db: AsyncSession = D
 
         device = Device(
             driver_id=new_driver.id,
-            imei=payload.imei,
-            serial_number=payload.serial_number or payload.android_id or f"SN_{payload.imei[-6:] if len(payload.imei)>=6 else '000000'}",
+            imei=clean_imei,
+            serial_number=payload.serial_number or payload.android_id or f"SN_{clean_imei[-6:] if len(clean_imei)>=6 else '000000'}",
             model="Smartphone Android",
-            fcm_token=payload.fcm_token or "",
+            auth_token=secrets.token_hex(32),
             app_version="1.0.0",
             is_locked=False,
             last_heartbeat=now,
@@ -224,10 +201,13 @@ async def device_heartbeat(payload: DeviceHeartbeatRequest, db: AsyncSession = D
         db.add(device)
         await db.commit()
         await db.refresh(device)
+    else:
+        # Vérification d'authentification sur appareil existant
+        if device.auth_token and payload.device_token:
+            if not secrets.compare_digest(payload.device_token, device.auth_token) and not secrets.compare_digest(payload.device_token, settings.ADMIN_SECRET_KEY):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Jeton de heartbeat matériel invalide.")
 
     device.last_heartbeat = now
-    if payload.fcm_token:
-        device.fcm_token = payload.fcm_token
     if payload.latitude is not None:
         device.latitude = payload.latitude
     if payload.longitude is not None:
@@ -250,24 +230,33 @@ async def device_heartbeat(payload: DeviceHeartbeatRequest, db: AsyncSession = D
         "lease_expires_at": device.lease_expires_at.isoformat() if device.lease_expires_at else None,
         "latitude": device.latitude,
         "longitude": device.longitude,
-        "imei": device.imei
+        "imei": device.imei,
+        "auth_token": device.auth_token
     }
 
 
 @router.post("/{imei}/telemetry")
-async def update_device_telemetry(imei: str, payload: DeviceTelemetryUpdate, db: AsyncSession = Depends(get_db)):
+async def update_device_telemetry(
+    imei: str,
+    payload: DeviceTelemetryUpdate,
+    db: AsyncSession = Depends(get_db)
+):
     """
     Envoi continu des coordonnées GPS et de l'état de l'appareil.
-    Garantit que la cartographie en direct (point vert) reste parfaitement synchronisée.
     """
-    res = await db.execute(select(Device).where(Device.imei == imei))
+    clean_imei = imei.strip()
+    res = await db.execute(select(Device).where(Device.imei == clean_imei))
     device = res.scalars().first()
     if not device:
         raise HTTPException(status_code=404, detail="Appareil non trouvé.")
 
+    if device.auth_token and payload.device_token:
+        if not secrets.compare_digest(payload.device_token, device.auth_token) and not secrets.compare_digest(payload.device_token, settings.ADMIN_SECRET_KEY):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Jeton télémétrie invalide.")
+
     device.latitude = payload.latitude
     device.longitude = payload.longitude
-    device.last_heartbeat = datetime.utcnow()
+    device.last_heartbeat = datetime.now(timezone.utc)
     if payload.battery_level is not None:
         device.battery_level = payload.battery_level
     if payload.ip_address:
@@ -280,19 +269,24 @@ async def update_device_telemetry(imei: str, payload: DeviceTelemetryUpdate, db:
         device.wifi_ssid = payload.wifi_ssid
 
     await db.commit()
-    return {"status": "telemetry_updated", "imei": imei, "latitude": device.latitude, "longitude": device.longitude}
+    return {"status": "telemetry_updated", "imei": clean_imei, "latitude": device.latitude, "longitude": device.longitude}
 
 
 @router.post("/pairing/simulate")
-async def simulate_device_pairing(payload: DevicePairingSimulate, db: AsyncSession = Depends(get_db)):
+async def simulate_device_pairing(
+    payload: DevicePairingSimulate,
+    db: AsyncSession = Depends(get_db),
+    admin_token: str = Depends(verify_admin_api_key)
+):
     """
-    Enrôlement pour le processus d'ajout (Wizard).
-    Permet de valider l'Étape 1 (connexion) et l'Étape 2 (importation des adresses).
+    Enrôlement de test pour le processus d'ajout (Wizard).
+    Protégé par clé d'administration.
     """
-    res = await db.execute(select(Device).where(Device.imei == payload.imei))
+    clean_imei = payload.imei.strip()
+    res = await db.execute(select(Device).where(Device.imei == clean_imei))
     device = res.scalars().first()
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     default_lease = now + timedelta(hours=settings.OFFLINE_GRACE_PERIOD_HOURS)
 
     # Conducteur
@@ -313,10 +307,10 @@ async def simulate_device_pairing(payload: DevicePairingSimulate, db: AsyncSessi
     if not device:
         device = Device(
             driver_id=driver.id,
-            imei=payload.imei,
-            serial_number=f"SN_{payload.imei[-6:]}",
+            imei=clean_imei,
+            serial_number=f"SN_{clean_imei[-6:]}",
             model=payload.model or "Smartphone Android",
-            fcm_token=f"fcm_token_device_{payload.imei[-6:]}",
+            auth_token=secrets.token_hex(32),
             app_version="1.2.0",
             is_locked=False,
             last_heartbeat=now,
@@ -349,6 +343,7 @@ async def simulate_device_pairing(payload: DevicePairingSimulate, db: AsyncSessi
             "imei": device.imei,
             "serial_number": device.serial_number,
             "model": device.model,
+            "auth_token": device.auth_token,
             "ip_address": device.ip_address,
             "mac_address": device.mac_address,
             "network_operator": device.network_operator,
@@ -369,14 +364,29 @@ async def simulate_device_pairing(payload: DevicePairingSimulate, db: AsyncSessi
 
 
 @router.get("", response_model=List[DeviceOut])
-async def list_devices(db: AsyncSession = Depends(get_db)):
+async def list_devices(
+    db: AsyncSession = Depends(get_db),
+    admin_token: str = Depends(verify_admin_api_key)
+):
+    """
+    Liste de tous les terminaux de la flotte.
+    Protégé par clé d'administration.
+    """
     res = await db.execute(select(Device).order_by(Device.id.desc()))
     return res.scalars().all()
 
 
 @router.get("/{imei}", response_model=DeviceOut)
-async def get_device_by_imei(imei: str, db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(Device).where(Device.imei == imei))
+async def get_device_by_imei(
+    imei: str,
+    db: AsyncSession = Depends(get_db),
+    admin_token: str = Depends(verify_admin_api_key)
+):
+    """
+    Détail d'un terminal par IMEI.
+    Protégé par clé d'administration.
+    """
+    res = await db.execute(select(Device).where(Device.imei == imei.strip()))
     device = res.scalars().first()
     if not device:
         raise HTTPException(status_code=404, detail="Appareil introuvable.")

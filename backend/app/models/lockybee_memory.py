@@ -1,6 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime
 from app.core.database import Base
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
 class LockybeeMemory(Base):
@@ -18,5 +22,5 @@ class LockybeeMemory(Base):
     learned_from = Column(String(150), default="ADMINISTRATEUR")
     is_active = Column(Boolean, default=True)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

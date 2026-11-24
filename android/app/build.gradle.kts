@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.gms.google-services")
 }
 
 android {
@@ -10,10 +9,10 @@ android {
 
     defaultConfig {
         applicationId = "com.locker.agent"
-        minSdk = 28 // Android 9+ (Galaxy A34 est sous Android 13/14)
+        minSdk = 28 // Android 9+
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -48,15 +47,11 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     
-    // Firebase Cloud Messaging (FCM)
-    implementation(platform("com.google.firebase:firebase-bom:32.8.0"))
-    implementation("com.google.firebase:firebase-messaging-ktx")
-    
-    // WorkManager pour les tâches en arrière-plan et le bail hors-ligne
+    // WorkManager pour les tâches de fond et bail hors-ligne local (72h)
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     
-    // Retrofit pour les appels API Backend (Heartbeat / Enregistrement)
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    // OkHttp3 & Coroutines pour Liaison WebSocket Cloud Directe sub-50ms (100% Hors Firebase)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }

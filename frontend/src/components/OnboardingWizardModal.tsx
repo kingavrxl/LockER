@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import L from 'leaflet';
 import { Device } from '../types';
+import { secureFetch } from '../api';
 
 interface OnboardingWizardModalProps {
   isOpen: boolean;
@@ -68,7 +69,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
     // Polling for device handshake
     const pollInterval = setInterval(async () => {
       try {
-        const res = await fetch(`${cleanUrl}/api/v1/devices`);
+        const res = await secureFetch(`${cleanUrl}/api/v1/devices`);
         if (res.ok && isSubscribed) {
           const list: Device[] = await res.json();
           // If a new device arrived recently (or we can simulate)
@@ -93,9 +94,8 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
     const dummyImei = `352965710${Math.floor(100000 + Math.random() * 900000)}`;
 
     try {
-      const res = await fetch(`${cleanUrl}/api/v1/devices/pairing/simulate`, {
+      const res = await secureFetch(`${cleanUrl}/api/v1/devices/pairing/simulate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imei: dummyImei,
           model: 'Smartphone Android',

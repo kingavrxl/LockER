@@ -8,8 +8,8 @@ class DeviceRegisterRequest(BaseModel):
     android_id: Optional[str] = None
     serial_number: Optional[str] = None
     model: Optional[str] = "Smartphone Android"
-    fcm_token: Optional[str] = ""
     app_version: Optional[str] = "1.0.0"
+    device_token: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     ip_address: Optional[str] = None
@@ -23,7 +23,7 @@ class DeviceHeartbeatRequest(BaseModel):
     imei: str
     android_id: Optional[str] = None
     serial_number: Optional[str] = None
-    fcm_token: Optional[str] = None
+    device_token: Optional[str] = None
     battery_level: Optional[int] = None
     is_network_connected: Optional[bool] = True
     latitude: Optional[float] = None
@@ -49,6 +49,6 @@ class DeviceOut(BaseModel):
     battery_level: Optional[int] = None
     last_heartbeat: Optional[datetime] = None
     lease_expires_at: Optional[datetime] = None
-    created_at: datetime
+    auth_token: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)

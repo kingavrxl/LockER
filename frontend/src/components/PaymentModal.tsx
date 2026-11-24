@@ -7,6 +7,7 @@ import {
   Unlock
 } from 'lucide-react';
 import { Driver } from '../types';
+import { secureFetch } from '../api';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -47,9 +48,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     const cleanUrl = apiUrl.replace(/\/$/, '');
 
     try {
-      const res = await fetch(`${cleanUrl}/api/v1/webhooks/simulate-payment`, {
+      const res = await secureFetch(`${cleanUrl}/api/v1/webhooks/simulate-payment`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           driver_id: currentDriver.id,
           amount: amount,
@@ -78,9 +78,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     const cleanUrl = apiUrl.replace(/\/$/, '');
 
     try {
-      const res = await fetch(`${cleanUrl}/api/v1/lock/simulate-overdue/${currentDriver.id}`, {
+      const res = await secureFetch(`${cleanUrl}/api/v1/lock/simulate-overdue/${currentDriver.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ overdue_days: 3 })
       });
 
