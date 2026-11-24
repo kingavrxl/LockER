@@ -5,7 +5,15 @@ from app.core.config import settings
 
 logger = logging.getLogger("Database")
 
-is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+raw_db_url = settings.DATABASE_URL
+if raw_db_url.startswith("postgres://"):
+    db_url = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+asyncpg://"):
+    db_url = raw_db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+else:
+    db_url = raw_db_url
+
+is_sqlite = db_url.startswith("sqlite")
 
 engine_kwargs = {
     "echo": False,
@@ -21,7 +29,7 @@ else:
 
 try:
     engine = create_async_engine(
-        settings.DATABASE_URL,
+        db_url,
         **engine_kwargs
     )
 except Exception as e:
