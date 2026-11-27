@@ -2,6 +2,7 @@ package com.locker.agent
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
@@ -20,7 +21,32 @@ class LockerApp : Application() {
 
     companion object {
         private const val TAG = "LockerApp"
-        const val APP_VERSION = "2.1.0"
+        const val APP_VERSION = "2.2.0"
+
+        fun isDeviceProvisioned(context: Context): Boolean {
+            return try {
+                Settings.Global.getInt(context.contentResolver, Settings.Global.DEVICE_PROVISIONED, 0) == 1
+            } catch (e: Exception) {
+                true
+            }
+        }
+
+        fun isUserSetupComplete(context: Context): Boolean {
+            return try {
+                Settings.Secure.getInt(context.contentResolver, "user_setup_complete", 0) == 1
+            } catch (e: Exception) {
+                true
+            }
+        }
+
+        fun isDeviceOwner(context: Context): Boolean {
+            return try {
+                val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+                dpm.isDeviceOwnerApp(context.packageName)
+            } catch (e: Exception) {
+                false
+            }
+        }
 
         @SuppressLint("HardwareIds")
         fun resolveDeviceImei(context: Context): String {
@@ -147,15 +173,18 @@ class LockerApp : Application() {
 
         Log.i(TAG, "Application LockER démarrée (Mode Cloud Native - 100% Hors Firebase).")
 
-        // 2. Démarrer immédiatement le service de liaison Cloud permanente
-        try {
-            LockerPersistentService.start(this)
-        } catch (e: Exception) {
-            Log.w(TAG, "LockerPersistentService start: ${e.message}")
+        // Pendant l'assistant d'installation Android (DEVICE_PROVISIONED == 0), ne pas lancer
+        // de ForegroundService avant que l'enrôlement Setup Wizard soit finalisé.
+        if (isDeviceProvisioned(this) && isUserSetupComplete(this)) {
+            try {
+                LockerPersistentService.start(this)
+            } catch (e: Exception) {
+                Log.w(TAG, "LockerPersistentService start: ${e.message}")
+            }
+            syncWithCloudNow(this)
+        } else {
+            Log.i(TAG, "Enrôlement Setup Wizard en cours : démarrage du service différé après finalisation.")
         }
-
-        // 3. Enregistrement initial auprès du Cloud
-        syncWithCloudNow(this)
     }
 
     fun resolveDeviceImei(): String = resolveDeviceImei(this)

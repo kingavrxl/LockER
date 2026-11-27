@@ -1,14 +1,15 @@
-# LockER MDM ProGuard Rules
--keep class com.locker.agent.receiver.LockerDeviceAdminReceiver { *; }
--keep class com.locker.agent.service.LockerFirebaseMessagingService { *; }
--keep class com.locker.agent.ui.LockScreenActivity { *; }
--keep class com.locker.agent.worker.OfflineLeaseWorker { *; }
+# LockER MDM ProGuard / R8 Rules
+-keep class com.locker.agent.** { *; }
+-keepclassmembers class com.locker.agent.** { *; }
 
-# Firebase & Play Services
--keep class com.google.firebase.** { *; }
-
-# Gson & Retrofit
 -keepattributes Signature
 -keepattributes *Annotation*
--keep class com.google.gson.** { *; }
--keep class retrofit2.** { *; }
+
+# OkHttp / Okio
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-dontwarn javax.annotation.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**
+-keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase

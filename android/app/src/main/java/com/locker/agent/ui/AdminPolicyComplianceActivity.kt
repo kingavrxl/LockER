@@ -1,18 +1,22 @@
 package com.locker.agent.ui
 
 import android.app.Activity
-import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.locker.agent.LockerApp
 import com.locker.agent.manager.LockerPolicyManager
-import com.locker.agent.service.LockerPersistentService
 import com.locker.agent.util.NetworkConfig
+import com.locker.agent.worker.PostProvisioningWorker
+import java.util.concurrent.TimeUnit
 
 /**
  * Activité appelée par Android ManagedProvisioning (Android 12+) juste après
  * l'attribution du statut Device Owner via QR Code.
- * Applique les politiques antivol, démarre le daemon Cloud et renvoie RESULT_OK.
+ * Applique uniquement les politiques initiales non-bloquantes, planifie l'activation
+ * du daemon après la sortie de l'assistant Setup Wizard, et renvoie immédiatement RESULT_OK.
  */
 class AdminPolicyComplianceActivity : Activity() {
 
@@ -27,21 +31,29 @@ class AdminPolicyComplianceActivity : Activity() {
 
         val policyManager = LockerPolicyManager(this)
         if (policyManager.isDeviceOwner()) {
-            Log.i(TAG, "Device Owner vérifié pendant ADMIN_POLICY_COMPLIANCE. Application des politiques...")
-            policyManager.setupDeviceOwnerPolicies()
+            Log.i(TAG, "Device Owner vérifié pendant ADMIN_POLICY_COMPLIANCE. Politiques initiales...")
+            policyManager.setupInitialProvisioningPolicies()
+            LockerApp.syncWithCloudNow(this)
+
+            try {
+                val postWork = OneTimeWorkRequestBuilder<PostProvisioningWorker>()
+                    .setInitialDelay(5, TimeUnit.SECONDS)
+                    .build()
+                WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+                    "locker_post_provisioning",
+                    ExistingWorkPolicy.REPLACE,
+                    postWork
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Planification PostProvisioningWorker: ${e.message}")
+            }
+
+            setResult(RESULT_OK, intent)
         } else {
-            Log.w(TAG, "AdminPolicyCompliance lancé mais l'application n'est pas encore Device Owner.")
+            Log.w(TAG, "AdminPolicyCompliance lancé mais l'application n'est pas Device Owner.")
+            setResult(RESULT_CANCELED)
         }
 
-        try {
-            LockerPersistentService.start(this)
-        } catch (e: Exception) {
-            Log.w(TAG, "Démarrage service compliance: ${e.message}")
-        }
-
-        LockerApp.syncWithCloudNow(this)
-
-        setResult(RESULT_OK, Intent())
         finish()
     }
 }

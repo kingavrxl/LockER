@@ -24,7 +24,7 @@ class GetProvisioningModeActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val adminExtras = NetworkConfig.applyFromIntent(this, intent)
+        NetworkConfig.applyFromIntent(this, intent)
 
         val allowedModes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             intent?.getIntegerArrayListExtra(DevicePolicyManager.EXTRA_PROVISIONING_ALLOWED_PROVISIONING_MODES)
@@ -43,9 +43,6 @@ class GetProvisioningModeActivity : Activity() {
 
         val resultIntent = Intent().apply {
             putExtra(DevicePolicyManager.EXTRA_PROVISIONING_MODE, selectedMode)
-            if (adminExtras != null) {
-                putExtra(DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE, adminExtras)
-            }
         }
 
         setResult(RESULT_OK, resultIntent)

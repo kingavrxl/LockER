@@ -20,8 +20,7 @@ import qrcode
 
 DEFAULT_SERVER_URL = "https://locker-2nuk.onrender.com"
 DEFAULT_SUPPORT_PHONE = "+2290191521518"
-DEFAULT_TIME_ZONE = "Africa/Porto-Novo"
-DEVICE_ADMIN_COMPONENT = "com.locker.agent/com.locker.agent.receiver.LockerDeviceAdminReceiver"
+DEVICE_ADMIN_COMPONENT = "com.locker.agent/.receiver.LockerDeviceAdminReceiver"
 
 
 def find_default_apk(repo_root: str) -> str:
@@ -64,7 +63,6 @@ def generate_provisioning_payload(
     wifi_password: Optional[str] = None,
     wifi_security: Optional[str] = None,
     wifi_hidden: bool = False,
-    time_zone: str = DEFAULT_TIME_ZONE,
 ) -> Dict[str, Any]:
     clean_base = normalize_server_url(server_url)
     apk_download_url = f"{clean_base}/download/app-release.apk"
@@ -74,8 +72,9 @@ def generate_provisioning_payload(
         "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION": apk_download_url,
         "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM": apk_checksum_b64url,
         "android.app.extra.PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED": True,
+        "android.app.extra.PROVISIONING_SKIP_ENCRYPTION": True,
+        "android.app.extra.PROVISIONING_SKIP_EDUCATION_SCREENS": True,
         "android.app.extra.PROVISIONING_USE_MOBILE_DATA": True,
-        "android.app.extra.PROVISIONING_TIME_ZONE": time_zone,
         "android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE": {
             "server_url": clean_base,
             "support_phone": support_phone,

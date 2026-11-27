@@ -4,13 +4,15 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.auth import verify_admin_api_key, verify_enrollment_key
 from app.models.device import Device
 from app.models.driver import Driver, PaymentStatusEnum
+from app.models.payment import Payment
+from app.models.audit_log import AuditLog
 from app.schemas.device import DeviceRegisterRequest, DeviceHeartbeatRequest, DeviceOut
 from app.core.config import settings
 
@@ -185,37 +187,10 @@ async def device_heartbeat(
     default_lease = now + timedelta(hours=settings.OFFLINE_GRACE_PERIOD_HOURS)
 
     if not device:
-        # Enrôlement automatique si nouveau terminal
-        driver_count_res = await db.execute(select(Driver))
-        num = len(driver_count_res.scalars().all()) + 1
-        new_driver = Driver(
-            full_name=f"Conducteur {num}",
-            phone_number=f"+229 01 {clean_imei[-8:-4] if len(clean_imei)>=8 else '9700'} {clean_imei[-4:] if len(clean_imei)>=4 else '0000'}",
-            vehicle_plate=f"RB-{clean_imei[-4:] if len(clean_imei)>=4 else '0000'}-Benin",
-            daily_rate_xof=settings.DAILY_PAYMENT_AMOUNT_XOF,
-            current_status=PaymentStatusEnum.UP_TO_DATE,
-            consecutive_overdue_days=0
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Terminal non enregistré ou supprimé. Enregistrement via /register requis.",
         )
-        db.add(new_driver)
-        await db.flush()
-
-        device = Device(
-            driver_id=new_driver.id,
-            imei=clean_imei,
-            serial_number=payload.serial_number or payload.android_id or f"SN_{clean_imei[-6:] if len(clean_imei)>=6 else '000000'}",
-            model="Smartphone Android",
-            auth_token=secrets.token_hex(32),
-            app_version="1.0.0",
-            is_locked=False,
-            last_heartbeat=now,
-            lease_expires_at=default_lease,
-            latitude=payload.latitude,
-            longitude=payload.longitude,
-            battery_level=payload.battery_level if payload.battery_level is not None else 100
-        )
-        db.add(device)
-        await db.commit()
-        await db.refresh(device)
     else:
         # Vérification d'authentification sur appareil existant
         if device.auth_token and payload.device_token:
@@ -389,6 +364,31 @@ async def list_devices(
     """
     res = await db.execute(select(Device).order_by(Device.id.desc()))
     return res.scalars().all()
+
+
+@router.delete("/purge-all")
+async def purge_all_enrollments(
+    db: AsyncSession = Depends(get_db),
+    admin_token: str = Depends(verify_admin_api_key)
+):
+    """
+    Supprime tous les enregistrements préalables (journaux d'audit, paiements, terminaux et conducteurs).
+    Protégé par clé d'administration.
+    """
+    deleted_audits = (await db.execute(delete(AuditLog))).rowcount or 0
+    deleted_payments = (await db.execute(delete(Payment))).rowcount or 0
+    deleted_devices = (await db.execute(delete(Device))).rowcount or 0
+    deleted_drivers = (await db.execute(delete(Driver))).rowcount or 0
+    await db.commit()
+    return {
+        "status": "purged",
+        "deleted": {
+            "audit_logs": deleted_audits,
+            "payments": deleted_payments,
+            "devices": deleted_devices,
+            "drivers": deleted_drivers,
+        },
+    }
 
 
 @router.get("/{imei}", response_model=DeviceOut)

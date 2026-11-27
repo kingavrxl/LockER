@@ -31,6 +31,46 @@ class LockerPolicyManager(private val context: Context) {
     }
 
     /**
+     * Politiques initiales sûres appliquées pendant ADMIN_POLICY_COMPLIANCE
+     * sans perturber la fin de l'assistant Setup Wizard Google/OEM.
+     */
+    fun setupInitialProvisioningPolicies() {
+        if (!isDeviceOwner()) return
+        try {
+            val perms = arrayOf(
+                Manifest.permission.READ_PHONE_STATE,
+                Manifest.permission.CALL_PHONE,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                "android.permission.READ_PHONE_NUMBERS",
+                "android.permission.POST_NOTIFICATIONS"
+            )
+            for (p in perms) {
+                try {
+                    dpm.setPermissionGrantState(adminComponent, context.packageName, p, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)
+                } catch (pe: Exception) {
+                    Log.d(TAG, "setPermissionGrantState $p: ${pe.message}")
+                }
+            }
+
+            val allowedPackages = arrayOf(
+                context.packageName,
+                "com.samsung.android.dialer",
+                "com.samsung.android.incallui",
+                "com.google.android.dialer",
+                "com.android.phone",
+                "com.android.server.telecom"
+            )
+            dpm.setLockTaskPackages(adminComponent, allowedPackages)
+            dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET)
+            dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_UNINSTALL_APPS)
+            Log.i(TAG, "Politiques initiales de provisioning configurées.")
+        } catch (e: Exception) {
+            Log.e(TAG, "Erreur setupInitialProvisioningPolicies: ${e.message}", e)
+        }
+    }
+
+    /**
      * Configure l'application pour verrouiller le terminal en mode Kiosk LockTask,
      * accorde automatiquement toutes les permissions nécessaires sans solliciter l'utilisateur
      * et applique les restrictions de sécurité antivol strictes.

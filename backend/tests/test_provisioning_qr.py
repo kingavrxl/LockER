@@ -5,7 +5,11 @@ import json
 import unittest
 from PIL import Image
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import StaticPool
 
+from app.core.config import settings
+from app.core.database import Base, get_db
 from app.main import app
 from app.services.provisioning_qr import (
     DEVICE_ADMIN_COMPONENT_NAME,
@@ -51,6 +55,8 @@ class ProvisioningQRTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertNotIn("=", payload["android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM"])
             self.assertIs(payload["android.app.extra.PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED"], True)
+            self.assertIs(payload["android.app.extra.PROVISIONING_SKIP_ENCRYPTION"], True)
+            self.assertIs(payload["android.app.extra.PROVISIONING_SKIP_EDUCATION_SCREENS"], True)
             self.assertIs(payload["android.app.extra.PROVISIONING_USE_MOBILE_DATA"], True)
             self.assertEqual(payload["android.app.extra.PROVISIONING_WIFI_SSID"], "LockER_Office")
             self.assertEqual(payload["android.app.extra.PROVISIONING_WIFI_SECURITY_TYPE"], "WPA")
@@ -88,6 +94,48 @@ class ProvisioningQRTests(unittest.IsolatedAsyncioTestCase):
         async with AsyncClient(transport=transport, base_url="https://locker-2nuk.onrender.com") as ac:
             res = await ac.get("/api/v1/provisioning/payload", params={"server_url": "ftp://evil.example"})
             self.assertEqual(res.status_code, 400)
+
+    async def test_purge_all_and_heartbeat_no_resurrection(self):
+        """Vérifie que purge-all supprime tous les enregistrements et qu'un heartbeat inconnu ne recrée pas l'appareil."""
+        eng = create_async_engine(
+            "sqlite+aiosqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Sess = async_sessionmaker(bind=eng, class_=AsyncSession, expire_on_commit=False)
+
+        async def override_db():
+            async with Sess() as session:
+                yield session
+
+        prev_override = app.dependency_overrides.get(get_db)
+        app.dependency_overrides[get_db] = override_db
+        try:
+            async with eng.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+
+            headers = {"X-API-Key": settings.ADMIN_SECRET_KEY}
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="https://locker-2nuk.onrender.com") as ac:
+                reg = await ac.post("/api/v1/devices/register", json={"imei": "352965710999888", "model": "Galaxy A34"})
+                self.assertEqual(reg.status_code, 200)
+
+                purge = await ac.delete("/api/v1/devices/purge-all", headers=headers)
+                self.assertEqual(purge.status_code, 200)
+                self.assertEqual(purge.json()["deleted"]["devices"], 1)
+                self.assertEqual(purge.json()["deleted"]["drivers"], 1)
+
+                hb = await ac.post("/api/v1/devices/heartbeat", json={"imei": "352965710999888"})
+                self.assertEqual(hb.status_code, 404)
+
+                devs = await ac.get("/api/v1/devices", headers=headers)
+                self.assertEqual(devs.status_code, 200)
+                self.assertEqual(devs.json(), [])
+        finally:
+            if prev_override is not None:
+                app.dependency_overrides[get_db] = prev_override
+            else:
+                app.dependency_overrides.pop(get_db, None)
+            await eng.dispose()
 
 
 if __name__ == "__main__":

@@ -76,6 +76,10 @@ class LockerPersistentService : Service() {
                 startForeground(NOTIF_ID, notification)
             }
 
+            if (policyManager.isDeviceOwner() && com.locker.agent.LockerApp.isDeviceProvisioned(this)) {
+                policyManager.setupDeviceOwnerPolicies()
+            }
+
             // Démarrage des liaisons Cloud Native
             startCloudWebSocketConnection()
             startPeriodicHeartbeatLoop()

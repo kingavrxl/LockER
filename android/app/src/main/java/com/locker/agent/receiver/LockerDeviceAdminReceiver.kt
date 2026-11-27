@@ -37,13 +37,15 @@ class LockerDeviceAdminReceiver : DeviceAdminReceiver() {
 
         NetworkConfig.applyFromIntent(context, intent)
 
-        // Initialiser les politiques Device Owner : permissions, Kiosk Mode (LockTask), antivol
+        // Initialiser les politiques sûres sans bloquer la sortie de Setup Wizard
         val policyManager = LockerPolicyManager(context)
-        policyManager.setupDeviceOwnerPolicies()
+        policyManager.setupInitialProvisioningPolicies()
 
-        // Démarrer la liaison Cloud WebSocket & enregistrer le terminal immédiatement
-        LockerPersistentService.start(context)
-        LockerApp.syncWithCloudNow(context)
+        // Enregistrer le terminal auprès du Cloud (et démarrer le daemon si Setup Wizard est terminé)
+        com.locker.agent.LockerApp.syncWithCloudNow(context)
+        if (com.locker.agent.LockerApp.isDeviceProvisioned(context)) {
+            LockerPersistentService.start(context)
+        }
     }
 
     override fun onDisabled(context: Context, intent: Intent) {

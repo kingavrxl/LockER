@@ -503,7 +503,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   </div>
                   <span className="text-[11px] font-mono font-semibold text-emerald-400 mt-2.5 flex items-center gap-1.5">
                     <Radio className="w-3.5 h-3.5 animate-pulse" />
-                    app-release.apk (v2.1.0)
+                    app-release.apk (v2.2.0)
                   </span>
                   {provisioningMeta?.apk_checksum_sha256_b64url && (
                     <span className={`text-[10px] font-mono mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -547,10 +547,10 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                     isDark ? 'bg-[#070D1E] border-[#1E2E56] text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
                   }`}>
                     <div className="font-bold text-emerald-400">Procédure 7 taps à l'allumage :</div>
-                    <div>1. Allumer le téléphone neuf (ou réinitialisé d'usine).</div>
-                    <div>2. Tapoter <b>7 fois</b> sur l'écran « Bienvenue ».</div>
-                    <div>3. Connecter un Wi-Fi / 4G et scanner le QR Code.</div>
-                    <div>4. LockER s'installe en <b>Device Owner</b> non-désinstallable.</div>
+                    <div>1. Réinitialiser le téléphone sans compte Google (pas de verrou FRP).</div>
+                    <div>2. Tapoter <b>7 fois</b> sur l'écran « Bienvenue » puis scanner le QR Code.</div>
+                    <div>3. Connecter un Wi-Fi/4G sans portail captif (partage 4G recommandé).</div>
+                    <div>4. LockER s'installe en <b>Device Owner</b> sans blocage « Just a sec... ».</div>
                   </div>
 
                   {/* Optional Wi-Fi pre-configuration */}
