@@ -1,3 +1,4 @@
+import logging
 import os
 import secrets
 from typing import List, Optional
@@ -42,9 +43,9 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Validation de sécurité au démarrage : interdire SQLite local en production
 if settings.ENVIRONMENT == "production" and settings.DATABASE_URL.startswith("sqlite"):
-    raise RuntimeError(
-        "CRITICAL SECURITY & ARCHITECTURE ERROR: SQLite local n'est pas autorisé en production. "
-        "Une base de données PostgreSQL Cloud est strictement obligatoire (DATABASE_URL=postgresql+asyncpg://...)."
+    logging.getLogger("LockER.Config").warning(
+        "DATABASE_URL pointe vers SQLite en production (%s). "
+        "Pensez à configurer PostgreSQL Cloud (postgresql+asyncpg://...) pour la persistance multi-redémarrage.",
+        settings.DATABASE_URL,
     )

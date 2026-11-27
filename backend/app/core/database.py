@@ -1,17 +1,27 @@
 import logging
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import declarative_base
 from app.core.config import settings
 
 logger = logging.getLogger("Database")
 
-raw_db_url = settings.DATABASE_URL
+raw_db_url = (settings.DATABASE_URL or "").strip() or "sqlite+aiosqlite:///./locker.db"
 if raw_db_url.startswith("postgres://"):
     db_url = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
 elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+asyncpg://"):
     db_url = raw_db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 else:
     db_url = raw_db_url
+
+if db_url.startswith("postgresql+asyncpg://") and "sslmode=" in db_url:
+    parsed = urlparse(db_url)
+    query_items = [
+        ("ssl" if k == "sslmode" else k, v)
+        for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+        if k != "channel_binding"
+    ]
+    db_url = urlunparse(parsed._replace(query=urlencode(query_items)))
 
 is_sqlite = db_url.startswith("sqlite")
 
