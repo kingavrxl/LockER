@@ -75,7 +75,7 @@ async def get_provisioning_payload(
     }
 
 
-@router.get("/qr.png")
+@router.api_route("/qr.png", methods=["GET", "HEAD"])
 async def get_provisioning_qr_png(
     request: Request,
     server_url: Optional[str] = Query(None),

@@ -135,7 +135,7 @@ async def health_check():
     }
 
 
-@app.get("/download/app-release.apk", tags=["APK Download"])
+@app.api_route("/download/app-release.apk", methods=["GET", "HEAD"], tags=["APK Download"])
 async def download_apk():
     apk_path = find_apk_path()
     if apk_path:

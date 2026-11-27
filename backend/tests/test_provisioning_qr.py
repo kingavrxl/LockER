@@ -75,6 +75,13 @@ class ProvisioningQRTests(unittest.IsolatedAsyncioTestCase):
             self.assertGreater(img.width, 200)
             self.assertGreater(img.height, 200)
 
+            head_qr = await ac.head("/api/v1/provisioning/qr.png")
+            self.assertEqual(head_qr.status_code, 200)
+
+            head_apk = await ac.head("/download/app-release.apk")
+            self.assertEqual(head_apk.status_code, 200)
+            self.assertEqual(head_apk.headers.get("content-type"), "application/vnd.android.package-archive")
+
     async def test_provisioning_rejects_invalid_server_url(self):
         """Vérifie qu'une URL invalide est rejetée avec HTTP 400."""
         transport = ASGITransport(app=app)
