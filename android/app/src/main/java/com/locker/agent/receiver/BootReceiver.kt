@@ -23,7 +23,7 @@ class BootReceiver : BroadcastReceiver() {
             val lockIntent = Intent(context, LockScreenActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 putExtra("EXTRA_REASON", prefs.getString("lock_reason", "Échéance journalière dépassée"))
-                putExtra("EXTRA_SUPPORT_PHONE", prefs.getString("support_phone", "+2290191521518"))
+                putExtra("EXTRA_SUPPORT_PHONE", com.locker.agent.util.NetworkConfig.getSupportPhone(context))
             }
             context.startActivity(lockIntent)
         }

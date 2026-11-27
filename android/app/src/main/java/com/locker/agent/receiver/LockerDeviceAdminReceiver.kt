@@ -6,7 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import android.widget.Toast
+import com.locker.agent.LockerApp
 import com.locker.agent.manager.LockerPolicyManager
+import com.locker.agent.service.LockerPersistentService
+import com.locker.agent.util.NetworkConfig
 
 class LockerDeviceAdminReceiver : DeviceAdminReceiver() {
 
@@ -21,16 +24,26 @@ class LockerDeviceAdminReceiver : DeviceAdminReceiver() {
     override fun onEnabled(context: Context, intent: Intent) {
         super.onEnabled(context, intent)
         Log.i(TAG, "Locker Device Admin activé avec succès.")
+        val policyManager = LockerPolicyManager(context)
+        if (policyManager.isDeviceOwner()) {
+            policyManager.setupDeviceOwnerPolicies()
+        }
         Toast.makeText(context, "LockER Device Owner Actif", Toast.LENGTH_LONG).show()
     }
 
     override fun onProfileProvisioningComplete(context: Context, intent: Intent) {
         super.onProfileProvisioningComplete(context, intent)
-        Log.i(TAG, "Enrôlement Device Owner terminé avec succès.")
-        
-        // Initialiser les politiques Device Owner : autoriser l'app en Kiosk Mode (LockTask)
+        Log.i(TAG, "Enrôlement Device Owner (QR / NFC / ADB) terminé avec succès.")
+
+        NetworkConfig.applyFromIntent(context, intent)
+
+        // Initialiser les politiques Device Owner : permissions, Kiosk Mode (LockTask), antivol
         val policyManager = LockerPolicyManager(context)
         policyManager.setupDeviceOwnerPolicies()
+
+        // Démarrer la liaison Cloud WebSocket & enregistrer le terminal immédiatement
+        LockerPersistentService.start(context)
+        LockerApp.syncWithCloudNow(context)
     }
 
     override fun onDisabled(context: Context, intent: Intent) {

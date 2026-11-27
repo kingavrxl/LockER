@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   X, 
   CheckCircle2, 
@@ -9,7 +9,12 @@ import {
   Navigation as NavIcon, 
   ArrowRight,
   Sparkles,
-  Radio
+  Radio,
+  Copy,
+  Check,
+  Download,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import L from 'leaflet';
 import { Device } from '../types';
@@ -23,6 +28,13 @@ interface OnboardingWizardModalProps {
   onEnrolledSuccessfully: () => void;
 }
 
+interface ProvisioningPayloadMeta {
+  apk_filename: string;
+  apk_size_bytes: number;
+  apk_checksum_sha256_b64url: string;
+  payload_json: string;
+}
+
 export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
   isOpen,
   onClose,
@@ -32,7 +44,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
 }) => {
   const isDark = theme === 'dark';
 
-  // Step 1: Scan QR & Wait real connection
+  // Step 1: Scan QR (7-tap boot provisioning) & Wait real connection
   // Step 2: Import IMEI & all addresses
   // Step 3: Live GPS map & Itinerary calculation
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
@@ -40,10 +52,23 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
   const [isStep2Validated, setIsStep2Validated] = useState(false);
   const [isStep3Validated, setIsStep3Validated] = useState(false);
 
+  // Optional Wi-Fi pre-configuration for factory-reset 7-tap QR provisioning
+  const [showWifiConfig, setShowWifiConfig] = useState(false);
+  const [wifiSsid, setWifiSsid] = useState('');
+  const [wifiPassword, setWifiPassword] = useState('');
+  const [wifiSecurity, setWifiSecurity] = useState<'WPA' | 'WEP' | 'NONE'>('WPA');
+
+  // QR metadata & UI state
+  const [qrFallback, setQrFallback] = useState(false);
+  const [provisioningMeta, setProvisioningMeta] = useState<ProvisioningPayloadMeta | null>(null);
+  const [copiedPayload, setCopiedPayload] = useState(false);
+  const [qrCacheBust] = useState(() => Date.now());
+
   // Simulated or captured paired data
   const [pairedDevice, setPairedDevice] = useState<any>(null);
+  const baselineHeartbeatsRef = useRef<Record<string, string> | null>(null);
 
-  // Default driver values for newly enrolled phone
+  // Default driver values for simulation
   const driverName = 'Chauffeur Enrôlé';
   const phoneNumber = '+229 01 97 45 88 12';
   const vehiclePlate = 'RB-3940-Cotonou';
@@ -59,42 +84,130 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const routeLayerRef = useRef<L.Polyline | null>(null);
 
-  // Step 1: Listen for real connection by polling backend
+  // Reset modal baseline when opened/closed
+  useEffect(() => {
+    if (isOpen) {
+      baselineHeartbeatsRef.current = null;
+      setQrFallback(false);
+    } else {
+      setCurrentStep(1);
+      setIsStep1Validated(false);
+      setIsStep2Validated(false);
+      setIsStep3Validated(false);
+      setPairedDevice(null);
+      setRouteCalculated(false);
+      baselineHeartbeatsRef.current = null;
+    }
+  }, [isOpen]);
+
+  const cleanApiUrl = useMemo(() => apiUrl.replace(/\/$/, ''), [apiUrl]);
+
+  const provisioningQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set('server_url', cleanApiUrl);
+    if (wifiSsid.trim()) {
+      params.set('wifi_ssid', wifiSsid.trim());
+      params.set('wifi_security', wifiSecurity);
+      if (wifiPassword && wifiSecurity !== 'NONE') {
+        params.set('wifi_password', wifiPassword);
+      }
+    }
+    return params.toString();
+  }, [cleanApiUrl, wifiSsid, wifiPassword, wifiSecurity]);
+
+  const qrImageUrl = qrFallback
+    ? `/enrollment_qr.png?v=${qrCacheBust}`
+    : `${cleanApiUrl}/api/v1/provisioning/qr.png?${provisioningQuery}`;
+
+  // Fetch provisioning metadata (checksum, size, JSON payload)
   useEffect(() => {
     if (!isOpen || currentStep !== 1) return;
+    let active = true;
+    fetch(`${cleanApiUrl}/api/v1/provisioning/payload?${provisioningQuery}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && data && data.payload_json) {
+          setProvisioningMeta(data);
+          setQrFallback(false);
+        }
+      })
+      .catch(() => {
+        // Fallback to static enrollment_qr.png if backend unavailable
+      });
+    return () => {
+      active = false;
+    };
+  }, [isOpen, currentStep, cleanApiUrl, provisioningQuery]);
+
+  // Step 1: Listen for real device handshake by polling backend
+  useEffect(() => {
+    if (!isOpen || currentStep !== 1 || isStep1Validated) return;
 
     let isSubscribed = true;
-    const cleanUrl = apiUrl.replace(/\/$/, '');
+    let timerId: ReturnType<typeof setTimeout> | null = null;
 
-    // Polling for device handshake
-    const pollInterval = setInterval(async () => {
+    const pollDevices = async () => {
       try {
-        const res = await secureFetch(`${cleanUrl}/api/v1/devices`);
+        const res = await secureFetch(`${cleanApiUrl}/api/v1/devices`);
         if (res.ok && isSubscribed) {
           const list: Device[] = await res.json();
-          // If a new device arrived recently (or we can simulate)
-          if (list.length > 0 && !isStep1Validated && !pairedDevice) {
-            // Found existing devices, but wait for user or simulation
+          if (baselineHeartbeatsRef.current === null) {
+            const initialMap: Record<string, string> = {};
+            list.forEach((dev) => {
+              initialMap[dev.imei] = dev.last_heartbeat || dev.created_at || '';
+            });
+            baselineHeartbeatsRef.current = initialMap;
+            return;
+          }
+
+          const baseline = baselineHeartbeatsRef.current;
+          const newlyConnected = list.find((dev) => {
+            const prev = baseline[dev.imei];
+            const current = dev.last_heartbeat || dev.created_at || '';
+            if (prev === undefined) return true;
+            return Boolean(current && prev && current !== prev);
+          });
+
+          if (newlyConnected && isSubscribed) {
+            setPairedDevice(newlyConnected);
+            setIsStep1Validated(true);
+            timerId = setTimeout(() => {
+              if (isSubscribed) setCurrentStep(2);
+            }, 1200);
           }
         }
-      } catch (e) {
+      } catch {
         // Silent poll error
       }
-    }, 3000);
+    };
+
+    pollDevices();
+    const pollInterval = setInterval(pollDevices, 3000);
 
     return () => {
       isSubscribed = false;
       clearInterval(pollInterval);
+      if (timerId) clearTimeout(timerId);
     };
-  }, [isOpen, currentStep, apiUrl, isStep1Validated, pairedDevice]);
+  }, [isOpen, currentStep, cleanApiUrl, isStep1Validated]);
 
-  // Trigger pairing simulation or real device acknowledgement
+  const handleCopyPayload = async () => {
+    if (!provisioningMeta?.payload_json) return;
+    try {
+      await navigator.clipboard.writeText(provisioningMeta.payload_json);
+      setCopiedPayload(true);
+      setTimeout(() => setCopiedPayload(false), 2000);
+    } catch {
+      // Ignore clipboard failure
+    }
+  };
+
+  // Trigger pairing simulation
   const handleTriggerConnection = async () => {
-    const cleanUrl = apiUrl.replace(/\/$/, '');
     const dummyImei = `352965710${Math.floor(100000 + Math.random() * 900000)}`;
 
     try {
-      const res = await secureFetch(`${cleanUrl}/api/v1/devices/pairing/simulate`, {
+      const res = await secureFetch(`${cleanApiUrl}/api/v1/devices/pairing/simulate`, {
         method: 'POST',
         body: JSON.stringify({
           imei: dummyImei,
@@ -117,13 +230,11 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         setPairedDevice(data.device);
         setIsStep1Validated(true);
 
-        // Auto advance to step 2 after validation
         setTimeout(() => {
           setCurrentStep(2);
         }, 1200);
       }
-    } catch (e) {
-      // Fallback local if offline
+    } catch {
       setPairedDevice({
         imei: dummyImei,
         serial_number: `R58W${dummyImei.slice(-6)}`,
@@ -161,7 +272,6 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         zoomControl: true
       });
 
-      // Google Maps Hybrid Satellite Layer (Véritable Imagerie Satellite)
       const tileUrl = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
 
       L.tileLayer(tileUrl, {
@@ -169,7 +279,6 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         maxZoom: 20
       }).addTo(map);
 
-      // Custom pulsing green marker
       const greenIcon = L.divIcon({
         className: 'pulsing-gps-marker',
         iconSize: [20, 20],
@@ -182,8 +291,8 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
           <b style="color: #059669;">● Point Vert Direct (GPS Actif)</b><br/>
           <b>${pairedDevice?.model || 'Smartphone Android'}</b><br/>
           IMEI: ${pairedDevice?.imei || 'Non renseigné'}<br/>
-          Batterie: ${pairedDevice?.battery_level || 95}%<br/>
-          Opérateur: ${pairedDevice?.network_operator || 'MTN Bénin'}
+          Batterie: ${pairedDevice?.battery_level ?? 100}%<br/>
+          Opérateur: ${pairedDevice?.network_operator || 'Réseau actif'}
         </div>
       `).openPopup();
 
@@ -206,16 +315,13 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
     const destLat = pairedDevice.latitude || 6.3685;
     const destLon = pairedDevice.longitude || 2.4280;
 
-    // Point de départ : QG LockER Marina / Haie Vive Cotonou
     const startLat = 6.3533;
     const startLon = 2.4011;
 
-    // Nettoyer l'ancienne route
     if (routeLayerRef.current) {
       map.removeLayer(routeLayerRef.current);
     }
 
-    // Marqueur QG
     const hqIcon = L.divIcon({
       html: '<div style="background-color:#2563EB; color:white; font-size:10px; font-weight:bold; padding:3px 6px; border-radius:6px; border:2px solid white; box-shadow:0 2px 6px rgba(0,0,0,0.3);">HQ QG</div>',
       className: 'hq-marker',
@@ -224,7 +330,6 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
     });
     L.marker([startLat, startLon], { icon: hqIcon }).addTo(map).bindPopup("<b>Siège Central LockER</b> (Départ Itinéraire)");
 
-    // Tracé de l'itinéraire routier (points de passage réels Cotonou)
     const routePoints: [number, number][] = [
       [startLat, startLon],
       [6.3560, 2.4080],
@@ -256,6 +361,9 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
 
   if (!isOpen) return null;
 
+  const displayLat = (pairedDevice?.latitude ?? 6.3685).toFixed(4);
+  const displayLon = (pairedDevice?.longitude ?? 2.4280).toFixed(4);
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
       <div className={`relative w-full max-w-3xl rounded-3xl border shadow-2xl transition-all duration-300 flex flex-col ${
@@ -278,7 +386,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
               </h2>
             </div>
             <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Enrôlement guidé par étapes avec validation progressive de la connexion & télémétrie MDM
+              Enrôlement Android Enterprise dès l'allumage (7 taps sur l'écran) &amp; activation Device Owner
             </p>
           </div>
 
@@ -296,7 +404,6 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         <div className={`px-6 py-3.5 border-b grid grid-cols-3 gap-2 sm:gap-4 ${
           isDark ? 'bg-[#070D1E]/60 border-[#1E2E56]' : 'bg-slate-50 border-slate-200'
         }`}>
-          {/* Step 1 Chip */}
           <div className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-bold transition ${
             currentStep === 1
               ? 'bg-emerald-500/15 border-emerald-500 text-emerald-400'
@@ -315,11 +422,10 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
             </div>
             <div className="hidden sm:block truncate">
               <div>Étape 1</div>
-              <div className="text-[10px] font-normal opacity-80">QR & Connexion</div>
+              <div className="text-[10px] font-normal opacity-80">QR 7-Tap &amp; Connexion</div>
             </div>
           </div>
 
-          {/* Step 2 Chip */}
           <div className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-bold transition ${
             currentStep === 2
               ? 'bg-emerald-500/15 border-emerald-500 text-emerald-400'
@@ -338,11 +444,10 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
             </div>
             <div className="hidden sm:block truncate">
               <div>Étape 2</div>
-              <div className="text-[10px] font-normal opacity-80">Import IMEI & Réseau</div>
+              <div className="text-[10px] font-normal opacity-80">Import IMEI &amp; Réseau</div>
             </div>
           </div>
 
-          {/* Step 3 Chip */}
           <div className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-bold transition ${
             currentStep === 3
               ? 'bg-emerald-500/15 border-emerald-500 text-emerald-400'
@@ -361,7 +466,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
             </div>
             <div className="hidden sm:block truncate">
               <div>Étape 3</div>
-              <div className="text-[10px] font-normal opacity-80">GPS & Itinéraire</div>
+              <div className="text-[10px] font-normal opacity-80">GPS &amp; Itinéraire</div>
             </div>
           </div>
         </div>
@@ -369,38 +474,140 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         {/* Modal Body: Active Step Content */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
 
-          {/* ======================= ÉTAPE 1 : QR CODE & CONNEXION ======================= */}
+          {/* ======================= ÉTAPE 1 : QR CODE 7-TAP & CONNEXION ======================= */}
           {currentStep === 1 && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="text-center max-w-lg mx-auto space-y-2">
+            <div className="space-y-5 animate-fadeIn">
+              <div className="text-center max-w-xl mx-auto space-y-2">
                 <h3 className="text-base sm:text-lg font-bold">
-                  Étape 1 : Scannage du QR Code & Établissement de la Connexion
+                  Étape 1 : Enrôlement QR Android Enterprise (7 taps à l'allumage)
                 </h3>
                 <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  Scannez le QR Code avec le smartphone Android pour installer l'APK LockER. La plateforme écoute en temps réel et validera dès que le premier handshake sera reçu.
+                  Sur un téléphone neuf ou réinitialisé (écran « Bienvenue »), tapotez <b>7 fois rapidement</b> sur un espace vide de l'écran puis scannez ce QR Code pour installer LockER automatiquement en mode <b>Device Owner</b>.
                 </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start justify-center gap-6">
                 {/* QR Code Container */}
-                <div className={`p-4 rounded-3xl border shadow-xl flex flex-col items-center justify-center relative ${
+                <div className={`p-4 rounded-3xl border shadow-xl flex flex-col items-center justify-center relative shrink-0 ${
                   isDark ? 'bg-[#070D1E] border-[#1E2E56]' : 'bg-white border-slate-200'
                 }`}>
-                  <div className="p-2 bg-white rounded-2xl shadow-inner">
+                  <div className="p-2.5 bg-white rounded-2xl shadow-inner">
                     <img 
-                      src={`/enrollment_qr.png?v=${Date.now()}`} 
-                      alt="QR Enrôlement APK" 
-                      className="w-48 h-48 object-contain"
+                      src={qrImageUrl}
+                      alt="QR Code Enrôlement Android Enterprise 7-Tap"
+                      onError={() => {
+                        if (!qrFallback) setQrFallback(true);
+                      }}
+                      className="w-52 h-52 object-contain"
                     />
                   </div>
                   <span className="text-[11px] font-mono font-semibold text-emerald-400 mt-2.5 flex items-center gap-1.5">
                     <Radio className="w-3.5 h-3.5 animate-pulse" />
-                    app-release.apk (v1.2.0)
+                    app-release.apk (v2.1.0)
                   </span>
+                  {provisioningMeta?.apk_checksum_sha256_b64url && (
+                    <span className={`text-[10px] font-mono mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      SHA-256 : {provisioningMeta.apk_checksum_sha256_b64url.slice(0, 14)}…
+                    </span>
+                  )}
+
+                  <div className="flex items-center gap-2 mt-3 w-full">
+                    <a
+                      href={qrImageUrl}
+                      download="locker_enrollment_qr.png"
+                      className={`flex-1 py-1.5 px-2.5 rounded-lg border text-[11px] font-semibold flex items-center justify-center gap-1 transition ${
+                        isDark
+                          ? 'bg-slate-800/80 border-slate-700 hover:bg-slate-800 text-slate-200'
+                          : 'bg-slate-100 border-slate-300 hover:bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>PNG</span>
+                    </a>
+                    {provisioningMeta?.payload_json && (
+                      <button
+                        type="button"
+                        onClick={handleCopyPayload}
+                        className={`flex-1 py-1.5 px-2.5 rounded-lg border text-[11px] font-semibold flex items-center justify-center gap-1 transition ${
+                          isDark
+                            ? 'bg-slate-800/80 border-slate-700 hover:bg-slate-800 text-slate-200'
+                            : 'bg-slate-100 border-slate-300 hover:bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {copiedPayload ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedPayload ? 'Copié' : 'JSON'}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Status Radar & Handshake Waiting Box */}
-                <div className="flex-1 max-w-sm space-y-4">
+                {/* Right column: 7-tap guide, Wi-Fi optional config & live status */}
+                <div className="flex-1 w-full max-w-sm space-y-3.5">
+                  <div className={`p-3.5 rounded-2xl border text-xs space-y-1.5 ${
+                    isDark ? 'bg-[#070D1E] border-[#1E2E56] text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
+                  }`}>
+                    <div className="font-bold text-emerald-400">Procédure 7 taps à l'allumage :</div>
+                    <div>1. Allumer le téléphone neuf (ou réinitialisé d'usine).</div>
+                    <div>2. Tapoter <b>7 fois</b> sur l'écran « Bienvenue ».</div>
+                    <div>3. Connecter un Wi-Fi / 4G et scanner le QR Code.</div>
+                    <div>4. LockER s'installe en <b>Device Owner</b> non-désinstallable.</div>
+                  </div>
+
+                  {/* Optional Wi-Fi pre-configuration */}
+                  <div className={`rounded-2xl border overflow-hidden ${
+                    isDark ? 'bg-[#070D1E] border-[#1E2E56]' : 'bg-slate-50 border-slate-200'
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={() => setShowWifiConfig(!showWifiConfig)}
+                      className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-semibold"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Wifi className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Wi-Fi automatique dans le QR (optionnel)</span>
+                      </span>
+                      {showWifiConfig ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+
+                    {showWifiConfig && (
+                      <div className="px-3.5 pb-3.5 pt-1 space-y-2 border-t border-slate-700/40 text-xs">
+                        <input
+                          type="text"
+                          value={wifiSsid}
+                          onChange={(e) => setWifiSsid(e.target.value)}
+                          placeholder="Nom du Wi-Fi (SSID)"
+                          className={`w-full px-2.5 py-1.5 rounded-lg border text-xs ${
+                            isDark ? 'bg-[#0B132B] border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-800'
+                          }`}
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={wifiSecurity}
+                            onChange={(e) => setWifiSecurity(e.target.value as 'WPA' | 'WEP' | 'NONE')}
+                            className={`px-2.5 py-1.5 rounded-lg border text-xs ${
+                              isDark ? 'bg-[#0B132B] border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-800'
+                            }`}
+                          >
+                            <option value="WPA">WPA / WPA2</option>
+                            <option value="WEP">WEP</option>
+                            <option value="NONE">Ouvert (Sans mot de passe)</option>
+                          </select>
+                          <input
+                            type="password"
+                            value={wifiPassword}
+                            disabled={wifiSecurity === 'NONE'}
+                            onChange={(e) => setWifiPassword(e.target.value)}
+                            placeholder="Mot de passe Wi-Fi"
+                            className={`px-2.5 py-1.5 rounded-lg border text-xs disabled:opacity-50 ${
+                              isDark ? 'bg-[#0B132B] border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-800'
+                            }`}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Status Radar & Handshake Waiting Box */}
                   <div className={`p-4 rounded-2xl border space-y-3 ${
                     isStep1Validated
                       ? 'bg-emerald-500/10 border-emerald-500 text-emerald-300'
@@ -421,7 +628,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                         <div className="text-xs opacity-80">
                           {isStep1Validated 
                             ? 'Le terminal a envoyé son jeton d\'enrôlement MDM.'
-                            : 'En attente du scannage et de l\'installation.'}
+                            : 'Validation automatique dès la fin de l\'installation.'}
                         </div>
                       </div>
                     </div>
@@ -452,10 +659,6 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   )}
-
-                  <p className="text-[11px] text-slate-500 text-center">
-                    💡 En production : dès que l'agent s'installe, la validation se fait automatiquement.
-                  </p>
                 </div>
               </div>
             </div>
@@ -466,7 +669,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
             <div className="space-y-6 animate-fadeIn">
               <div className="text-center max-w-lg mx-auto space-y-2">
                 <h3 className="text-base sm:text-lg font-bold">
-                  Étape 2 : Importation Complète des Données Matérielles & Réseau
+                  Étape 2 : Importation Complète des Données Matérielles &amp; Réseau
                 </h3>
                 <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   L'agent MDM a importé automatiquement les adresses physiques, réseau, l'IMEI et le matériel.
@@ -493,7 +696,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                       IMEI : {pairedDevice?.imei || '-'}
                     </div>
                     <div className="text-xs text-slate-400">
-                      S/N : <span className="font-mono text-slate-200">{pairedDevice?.serial_number || 'R58W80ABC12'}</span>
+                      S/N : <span className="font-mono text-slate-200">{pairedDevice?.serial_number || pairedDevice?.imei || '-'}</span>
                     </div>
                     <div className="text-xs text-slate-400">
                       Modèle : <span className="text-slate-200 font-medium">{pairedDevice?.model || 'Smartphone Android'}</span>
@@ -510,19 +713,19 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   </div>
                   <div className="space-y-1 flex-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-400">Adresses Réseau & MAC</span>
+                      <span className="text-xs font-semibold text-slate-400">Adresses Réseau &amp; MAC</span>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                         ✓ Validé
                       </span>
                     </div>
                     <div className="text-xs text-slate-300 font-mono">
-                      IP Publique : <span className="text-cyan-400 font-bold">{pairedDevice?.ip_address || '197.234.221.42'}</span>
+                      IP Publique : <span className="text-cyan-400 font-bold">{pairedDevice?.ip_address || 'En attente télémétrie'}</span>
                     </div>
                     <div className="text-xs text-slate-300 font-mono">
-                      MAC Wi-Fi : <span className="text-cyan-400">{pairedDevice?.mac_address || '38:F9:D3:5B:2A:10'}</span>
+                      MAC Wi-Fi : <span className="text-cyan-400">{pairedDevice?.mac_address || 'Protégé Android 10+'}</span>
                     </div>
                     <div className="text-xs text-slate-400">
-                      Passerelle : <span className="font-mono">192.168.1.1 (MTN Fibre)</span>
+                      Liaison Cloud : <span className="font-mono">WebSocket sub-50ms</span>
                     </div>
                   </div>
                 </div>
@@ -536,19 +739,19 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   </div>
                   <div className="space-y-1 flex-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-400">Réseau Télécom & SIM</span>
+                      <span className="text-xs font-semibold text-slate-400">Réseau Télécom &amp; SIM</span>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                         ✓ Validé
                       </span>
                     </div>
                     <div className="text-sm font-bold text-amber-300">
-                      {pairedDevice?.network_operator || 'MTN Bénin (5G VoLTE)'}
+                      {pairedDevice?.network_operator || 'Détection opérateur...'}
                     </div>
                     <div className="text-xs text-slate-400">
-                      Signal : <span className="text-emerald-400 font-semibold">-72 dBm (Excellent)</span>
+                      État : <span className="text-emerald-400 font-semibold">En ligne (Heartbeat actif)</span>
                     </div>
                     <div className="text-xs text-slate-400">
-                      SSID Wi-Fi : <span className="text-slate-200">{pairedDevice?.wifi_ssid || 'MTN_FIBRE_HQ'}</span>
+                      SSID Wi-Fi : <span className="text-slate-200">{pairedDevice?.wifi_ssid || 'Réseau actif'}</span>
                     </div>
                   </div>
                 </div>
@@ -562,17 +765,16 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   </div>
                   <div className="space-y-1 flex-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-400">Sécurité MDM & Énergie</span>
+                      <span className="text-xs font-semibold text-slate-400">Sécurité MDM &amp; Énergie</span>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                         ✓ Validé
                       </span>
                     </div>
                     <div className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-                      <span>Batterie : {pairedDevice?.battery_level || 95}%</span>
-                      <span className="text-xs text-slate-400">(En charge)</span>
+                      <span>Batterie : {pairedDevice?.battery_level ?? 100}%</span>
                     </div>
                     <div className="text-xs text-slate-400">
-                      Knox Device Owner : <span className="text-emerald-400 font-semibold">ACTIF (Non-désinstallable)</span>
+                      Device Owner : <span className="text-emerald-400 font-semibold">ACTIF (Non-désinstallable)</span>
                     </div>
                     <div className="text-xs text-slate-400">
                       Permission Localisation : <span className="text-emerald-400 font-semibold">Toujours Activée (MDM Policy)</span>
@@ -596,7 +798,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 transition flex items-center gap-2"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Valider les Informations & Passer au GPS</span>
+                  <span>Valider les Informations &amp; Passer au GPS</span>
                 </button>
               </div>
             </div>
@@ -607,7 +809,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
             <div className="space-y-5 animate-fadeIn">
               <div className="text-center max-w-lg mx-auto space-y-1">
                 <h3 className="text-base sm:text-lg font-bold">
-                  Étape 3 : Cartographie & Traçabilité GPS en Direct
+                  Étape 3 : Cartographie &amp; Traçabilité GPS en Direct
                 </h3>
                 <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   La localisation MDM est activée de manière permanente. Le point vert indique la position en temps réel.
@@ -628,12 +830,11 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                       POINT VERT EN DIRECT (GPS FIXÉ)
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      Latitude : 6.3685° N • Longitude : 2.4280° E (Haie Vive, Cotonou)
+                      Latitude : {displayLat}° N • Longitude : {displayLon}° E
                     </div>
                   </div>
                 </div>
 
-                {/* Le fameux Bouton "Localiser le téléphone" qui donne l'itinéraire */}
                 <button
                   onClick={handleCalculateItinerary}
                   className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-xs font-extrabold shadow-lg shadow-emerald-500/30 transition flex items-center justify-center gap-2"
@@ -643,7 +844,6 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                 </button>
               </div>
 
-              {/* Itinerary Results Banner (if calculated) */}
               {routeCalculated && (
                 <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500/50 text-emerald-200 flex flex-wrap items-center justify-between gap-3 text-xs animate-scale-up">
                   <div className="flex items-center gap-2">
@@ -683,7 +883,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-lg shadow-emerald-600/30 transition flex items-center gap-2 active:scale-95"
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>✓ TERMINER & ENRÔLER DANS LA FLOTTE</span>
+                  <span>✓ TERMINER &amp; ENRÔLER DANS LA FLOTTE</span>
                 </button>
               </div>
             </div>

@@ -88,7 +88,8 @@ class LockScreenActivity : Activity() {
         btnEmergencyCall = findViewById(R.id.btnEmergencyCall)
 
         val reason = intent.getStringExtra("EXTRA_REASON") ?: "Paiement en retard de plus de 3 jours"
-        supportPhoneNumber = intent.getStringExtra("EXTRA_SUPPORT_PHONE") ?: "+2290191521518"
+        supportPhoneNumber = intent.getStringExtra("EXTRA_SUPPORT_PHONE")
+            ?: com.locker.agent.util.NetworkConfig.getSupportPhone(this)
         tvReason.text = "Motif : $reason"
 
         setupActions()

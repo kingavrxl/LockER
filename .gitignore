@@ -37,6 +37,7 @@ local.properties
 *.iml
 *.keystore
 *.jks
+keystore.properties
 android/.gradle/
 android/app/.cxx/
 

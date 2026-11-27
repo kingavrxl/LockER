@@ -73,13 +73,13 @@ Le tableau de bord est accessible sur : `http://localhost:3000`
 ## 📱 Enrôlement des Samsung Galaxy A34 5G
 
 ### Méthode 1 : Par QR Code Android Enterprise (Recommandé en production)
-1. Réinitialiser le téléphone en sortie d'usine.
-2. Sur l'écran de bienvenue "Bienvenue", tapoter 6 fois sur un espace vide.
-3. Scanner le QR Code généré via le script :
+1. Allumer un téléphone neuf ou réinitialisé en sortie d'usine sur l'écran **"Bienvenue"**.
+2. **Tapoter 7 fois rapidement** (6 à 7 fois selon le modèle) sur un espace vide de l'écran de bienvenue pour ouvrir le lecteur QR Android Enterprise.
+3. Connecter le Wi-Fi (ou utiliser les données mobiles / Wi-Fi préconfiguré dans le QR) et scanner le QR Code affiché dans le Dashboard (**+ Ajouter un Téléphone**) ou généré par :
    ```bash
    python scripts/generate_qr_provisioning.py
    ```
-4. Le Samsung télécharge l'APK et devient automatiquement `Device Owner`.
+4. Android télécharge `app-release.apk`, vérifie son empreinte SHA-256, active automatiquement LockER en `Device Owner` (`GET_PROVISIONING_MODE` / `ADMIN_POLICY_COMPLIANCE`) et enrôle le téléphone sur la plateforme Cloud.
 
 ### Méthode 2 : Par câble USB (ADB)
 1. Activer le débogage USB sur le téléphone (sans compte Google configuré).

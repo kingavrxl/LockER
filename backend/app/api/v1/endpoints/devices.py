@@ -96,6 +96,21 @@ async def register_device(
         if not device.auth_token:
             device.auth_token = secrets.token_hex(32)
 
+        # Si l'appareil s'est initialement enregistré avant Device Owner avec un fallback (android_id / DEV_)
+        # et qu'il renvoie maintenant son véritable IMEI matériel (14-16 chiffres), mettre à jour proprement.
+        if (
+            clean_imei != device.imei
+            and clean_imei.isdigit()
+            and 14 <= len(clean_imei) <= 16
+            and not device.imei.isdigit()
+        ):
+            existing_imei_res = await db.execute(select(Device).where(Device.imei == clean_imei))
+            if not existing_imei_res.scalars().first():
+                device.imei = clean_imei
+
+        if payload.serial_number and (not device.serial_number or device.serial_number.startswith("SN_")):
+            device.serial_number = payload.serial_number
+
         device.model = payload.model or device.model
         device.app_version = payload.app_version or device.app_version
         device.last_heartbeat = now

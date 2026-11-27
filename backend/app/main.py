@@ -13,8 +13,9 @@ from app.core.config import settings
 from app.core.database import engine, Base, AsyncSessionLocal
 from app.models.device import Device
 from app.models.payment_schedule import PaymentScheduleRule
-from app.api.v1.endpoints import drivers, devices, lock, webhooks, lockybee, rules
+from app.api.v1.endpoints import drivers, devices, lock, webhooks, lockybee, rules, provisioning
 from app.services.cloud_push_hub import CloudPushHub
+from app.services.provisioning_qr import find_apk_path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LockER")
@@ -60,6 +61,7 @@ app.include_router(lock.router, prefix=settings.API_V1_STR)
 app.include_router(webhooks.router, prefix=settings.API_V1_STR)
 app.include_router(lockybee.router, prefix=settings.API_V1_STR)
 app.include_router(rules.router, prefix=settings.API_V1_STR)
+app.include_router(provisioning.router, prefix=settings.API_V1_STR)
 
 
 # =========================================================================
@@ -135,15 +137,9 @@ async def health_check():
 
 @app.get("/download/app-release.apk", tags=["APK Download"])
 async def download_apk():
-    paths_to_check = [
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "app-release.apk")),
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "android", "app", "build", "outputs", "apk", "release", "app-release.apk")),
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk")),
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "app-release.apk")),
-    ]
-    for p in paths_to_check:
-        if os.path.exists(p):
-            return FileResponse(p, media_type="application/vnd.android.package-archive", filename="app-release.apk")
+    apk_path = find_apk_path()
+    if apk_path:
+        return FileResponse(apk_path, media_type="application/vnd.android.package-archive", filename="app-release.apk")
     raise HTTPException(status_code=404, detail="L'APK n'est pas encore compilé.")
 
 

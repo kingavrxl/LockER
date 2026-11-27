@@ -37,6 +37,7 @@ class DeviceOut(BaseModel):
     id: int
     driver_id: Optional[int] = None
     imei: str
+    serial_number: Optional[str] = None
     model: str
     is_locked: bool
     lock_reason: Optional[str] = None
@@ -47,8 +48,10 @@ class DeviceOut(BaseModel):
     network_operator: Optional[str] = None
     wifi_ssid: Optional[str] = None
     battery_level: Optional[int] = None
+    app_version: Optional[str] = None
     last_heartbeat: Optional[datetime] = None
     lease_expires_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
     auth_token: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)

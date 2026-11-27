@@ -43,6 +43,12 @@ class LockerPolicyManager(private val context: Context) {
 
         try {
             // 1. Accorder automatiquement TOUTES les permissions sans demander à l'utilisateur
+            try {
+                dpm.setPermissionPolicy(adminComponent, DevicePolicyManager.PERMISSION_POLICY_AUTO_GRANT)
+            } catch (pe: Exception) {
+                Log.d(TAG, "setPermissionPolicy: ${pe.message}")
+            }
+
             val perms = arrayOf(
                 Manifest.permission.READ_PHONE_STATE,
                 Manifest.permission.CALL_PHONE,
@@ -57,6 +63,15 @@ class LockerPolicyManager(private val context: Context) {
                     dpm.setPermissionGrantState(adminComponent, context.packageName, p, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)
                 } catch (pe: Exception) {
                     Log.d(TAG, "setPermissionGrantState $p: ${pe.message}")
+                }
+            }
+
+            // Activer la localisation GPS en tant que Device Owner (Android 9+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                try {
+                    dpm.setLocationEnabled(adminComponent, true)
+                } catch (le: Exception) {
+                    Log.d(TAG, "setLocationEnabled: ${le.message}")
                 }
             }
 
@@ -79,6 +94,15 @@ class LockerPolicyManager(private val context: Context) {
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_ADD_USER)
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_DEBUGGING_FEATURES)
             dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_USB_FILE_TRANSFER)
+
+            // Empêcher l'arrêt forcé ou l'effacement des données de LockER (Android 11+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                try {
+                    dpm.setUserControlDisabledPackages(adminComponent, listOf(context.packageName))
+                } catch (ue: Exception) {
+                    Log.d(TAG, "setUserControlDisabledPackages: ${ue.message}")
+                }
+            }
 
             Log.i(TAG, "Politiques Device Owner durcies configurées avec succès.")
         } catch (e: Exception) {

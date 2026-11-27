@@ -66,7 +66,7 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(this, LockScreenActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 putExtra("EXTRA_REASON", prefs.getString("lock_reason", "Échéance dépassée"))
-                putExtra("EXTRA_SUPPORT_PHONE", prefs.getString("support_phone", "+2290191521518"))
+                putExtra("EXTRA_SUPPORT_PHONE", NetworkConfig.getSupportPhone(this@MainActivity))
             }
             startActivity(intent)
             finish()
@@ -287,7 +287,7 @@ class MainActivity : AppCompatActivity() {
                     put("serial_number", if (serialDetected.isNotBlank() && serialDetected != Build.UNKNOWN) serialDetected else androidId)
                     put("model", "${Build.MANUFACTURER} ${Build.MODEL}".trim())
                     put("device_token", token)
-                    put("app_version", "2.0.0")
+                    put("app_version", LockerApp.APP_VERSION)
                 }
                 val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
 

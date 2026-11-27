@@ -109,7 +109,7 @@ class LockerPersistentService : Service() {
                                 val json = JSONObject(text)
                                 val action = json.optString("action")
                                 val reason = json.optString("reason", "Action administrative Cloud")
-                                val supportPhone = json.optString("support_phone", "+2290191521518")
+                                val supportPhone = json.optString("support_phone", NetworkConfig.getSupportPhone(applicationContext))
 
                                 when (action) {
                                     "LOCK" -> {
@@ -198,7 +198,7 @@ class LockerPersistentService : Service() {
                             val respJson = JSONObject(responseBody)
                             val isLockedOnServer = respJson.optBoolean("is_locked", false)
                             val lockReason = respJson.optString("lock_reason", "Échéance journalière dépassée (≥ 3 jours)")
-                            val supportPhone = respJson.optString("support_phone", "+2290191521518")
+                            val supportPhone = respJson.optString("support_phone", NetworkConfig.getSupportPhone(applicationContext))
                             val isCurrentlyLocked = prefs.getBoolean("is_locked", false)
 
                             val returnedToken = respJson.optString("auth_token", "")
@@ -240,7 +240,7 @@ class LockerPersistentService : Service() {
             val intent = Intent(this, LockScreenActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 putExtra("EXTRA_REASON", reason)
-                putExtra("EXTRA_SUPPORT_PHONE", "+2290191521518")
+                putExtra("EXTRA_SUPPORT_PHONE", NetworkConfig.getSupportPhone(applicationContext))
             }
             startActivity(intent)
         } catch (e: Exception) {
@@ -249,21 +249,7 @@ class LockerPersistentService : Service() {
     }
 
     private fun resolveImei(): String {
-        val prefs = getSharedPreferences("locker_prefs", Context.MODE_PRIVATE)
-        val savedImei = prefs.getString("assigned_imei", "")
-        if (!savedImei.isNullOrBlank()) return savedImei
-
-        try {
-            val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val imei = tm?.imei
-                if (!imei.isNullOrBlank()) return imei
-            }
-        } catch (e: Exception) {
-            // Ignorer
-        }
-        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-        return if (!androidId.isNullOrBlank()) androidId else "TERMINAL_ANDROID"
+        return com.locker.agent.LockerApp.resolveDeviceImei(applicationContext)
     }
 
     private fun getBatteryLevel(): Int {

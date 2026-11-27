@@ -37,7 +37,7 @@ class OfflineLeaseWorker(
                     val policyManager = LockerPolicyManager(applicationContext)
                     policyManager.lockDevice(
                         reason = "Bail hors-ligne expiré (> 72h sans contact avec le serveur)",
-                        supportPhone = prefs.getString("support_phone", "+2290191521518") ?: "+2290191521518"
+                        supportPhone = com.locker.agent.util.NetworkConfig.getSupportPhone(applicationContext)
                     )
                 }
             } catch (e: Exception) {
